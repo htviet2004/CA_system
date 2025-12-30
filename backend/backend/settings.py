@@ -74,7 +74,12 @@ TEMPLATES = [
 ]
 TEMPLATES[0]["DIRS"] = [BASE_DIR / "templates"]
 STATIC_URL = 'static/'
-STATICFILES_DIRS = [BASE_DIR / "static"]
+# include default static plus frontend build outputs (CRA -> build, Vite -> dist)
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+    BASE_DIR.parent / 'frontend' / 'build',
+    BASE_DIR.parent / 'frontend' / 'dist',
+]
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
