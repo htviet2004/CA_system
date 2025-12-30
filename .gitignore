@@ -1,2 +1,4 @@
 .venv
 user_test
+node_modules/
+dist/
