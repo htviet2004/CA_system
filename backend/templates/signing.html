@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>PDF Signing Demo</h1>
+
+<div id="messages"></div>
+
+<section>
+  <h2>Register</h2>
+  <form id="registerForm" onsubmit="return false;">
+    <input name="username" id="reg_username" placeholder="Username" required />
+    <input name="password" id="reg_password" type="password" placeholder="Password" required />
+    <button onclick="registerUser()">Register</button>
+  </form>
+</section>
+
+<section>
+  <h2>Login</h2>
+  <form id="loginForm" onsubmit="return false;">
+    <input name="username" id="login_username" placeholder="Username" required />
+    <input name="password" id="login_password" type="password" placeholder="Password" required />
+    <button onclick="loginUser()">Login</button>
+  </form>
+</section>
+
+<section>
+  <h2>Upload & Sign PDF</h2>
+  <form id="signForm" onsubmit="return false;">
+    <input type="file" id="pdfFile" accept="application/pdf" required />
+    <br />
+    <label>Use stored credentials (from Login):</label>
+    <input type="checkbox" id="useLoginCreds" checked />
+    <div id="manualCreds">
+      <input name="username" id="sign_username" placeholder="Username" />
+      <input name="password" id="sign_password" type="password" placeholder="Password" />
+    </div>
+    <br />
+    <button onclick="signPdf()">Sign PDF</button>
+  </form>
+  <div id="downloadArea"></div>
+</section>
+
+<script>
+function getCookie(name) {
+  const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+  return v ? v.pop() : '';
+}
+
+function showMessage(msg, isError=false){
+  const el = document.getElementById('messages');
+  el.innerText = msg;
+  el.style.color = isError ? 'red' : 'green';
+}
+
+let logged = {username: '', password: ''};
+
+async function registerUser(){
+  const u = document.getElementById('reg_username').value;
+  const p = document.getElementById('reg_password').value;
+  const fd = new FormData(); fd.append('username', u); fd.append('password', p);
+  try{
+    const res = await fetch('/api/sign/register/', {method:'POST', body:fd, headers:{'X-CSRFToken': getCookie('csrftoken')}, credentials: 'same-origin'});
+    if(!res.ok) throw new Error(await res.text());
+    showMessage('Registered '+u);
+  }catch(e){ showMessage('Register error: '+e.message, true); }
+}
+
+async function loginUser(){
+  const u = document.getElementById('login_username').value;
+  const p = document.getElementById('login_password').value;
+  const fd = new FormData(); fd.append('username', u); fd.append('password', p);
+  try{
+    const res = await fetch('/api/sign/login/', {method:'POST', body:fd, headers:{'X-CSRFToken': getCookie('csrftoken')}, credentials: 'same-origin'});
+    if(!res.ok) throw new Error(await res.text());
+    logged.username = u; logged.password = p;
+    showMessage('Logged in as '+u);
+  }catch(e){ showMessage('Login error: '+e.message, true); }
+}
+
+async function signPdf(){
+  const f = document.getElementById('pdfFile').files[0];
+  if(!f){ showMessage('Select a PDF first', true); return; }
+  const useLogin = document.getElementById('useLoginCreds').checked;
+  const fd = new FormData(); fd.append('file', f);
+  if(useLogin){ fd.append('username', logged.username); fd.append('password', logged.password); }
+  else{ fd.append('username', document.getElementById('sign_username').value); fd.append('password', document.getElementById('sign_password').value); }
+  try{
+    const res = await fetch('/api/sign/', {method:'POST', body:fd, headers:{'X-CSRFToken': getCookie('csrftoken')}, credentials: 'same-origin'});
+    if(!res.ok) throw new Error(await res.text());
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = (f.name.replace(/\.pdf$/i,'') || 'signed') + '_signed.pdf';
+    a.innerText = 'Download signed PDF';
+    const area = document.getElementById('downloadArea'); area.innerHTML=''; area.appendChild(a);
+    showMessage('Signed successfully');
+  }catch(e){ showMessage('Sign error: '+e.message, true); }
+}
+
+document.getElementById('useLoginCreds').addEventListener('change', function(){
+  document.getElementById('manualCreds').style.display = this.checked ? 'none' : 'block';
+});
+document.getElementById('manualCreds').style.display = 'none';
+</script>
+
+{% endblock %}

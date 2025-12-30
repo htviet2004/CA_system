@@ -1,0 +1,29 @@
+[ ca ]
+default_ca = CA_default
+
+[ CA_default ]
+dir               = .
+database          = $dir/index.txt
+new_certs_dir     = $dir/newcerts
+certificate       = $dir/rootCA.crt
+private_key       = $dir/rootCA.key
+serial            = $dir/serial
+default_md        = sha256
+policy            = policy_loose
+x509_extensions   = v3_intermediate_ca
+default_days      = 3650
+
+[ policy_loose ]
+countryName             = optional
+stateOrProvinceName     = optional
+localityName            = optional
+organizationName        = optional
+organizationalUnitName  = optional
+commonName              = supplied
+emailAddress            = optional
+
+[ v3_intermediate_ca ]
+basicConstraints = critical, CA:true, pathlen:0
+keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer

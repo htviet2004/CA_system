@@ -1,0 +1,2 @@
+V	351227050552Z		2000	unknown	/C=VN/ST=Da Nang/L=Da Nang/O=DUT/OU=Intermediate CA/CN=DUT Intermediate Certification Authority
+V	351227055215Z		2001	unknown	/C=VN/ST=Da Nang/L=Da Nang/O=DUT/OU=IT Faculty/CN=www.dut.local
