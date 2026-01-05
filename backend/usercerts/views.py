@@ -1,21 +1,20 @@
 import os
-import hashlib
-import base64
 from pathlib import Path
 from django.conf import settings
 from django.http import JsonResponse, FileResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate
 from .models import UserCert
-from cryptography.fernet import Fernet
 import subprocess
 import tempfile
 from django.contrib.auth.models import User
+from signing.utils import get_fernet
 
 
 def _derive_key():
-    digest = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
-    return base64.urlsafe_b64encode(digest)
+    """DEPRECATED: Use signing.utils.get_fernet() instead"""
+    from signing.utils import derive_encryption_key
+    return derive_encryption_key()
 
 
 @csrf_exempt
@@ -55,7 +54,7 @@ def upload_p12(request):
             fh.write(chunk)
 
     # encrypt p12 and passphrase
-    f = Fernet(_derive_key())
+    f = get_fernet()
     enc = f.encrypt(p12_path.read_bytes())
     p12_enc_path = user_dir / 'user.p12.enc'
     p12_enc_path.write_bytes(enc)
@@ -138,7 +137,7 @@ def issue_cert(request):
         subprocess.run(['openssl', 'pkcs12', '-export', '-inkey', str(key_path), '-in', str(crt_path), '-certfile', str(interm_cert), '-out', str(p12_path), '-passout', f'pass:{passphrase}'], check=True)
 
         # encrypt and store
-        f = Fernet(_derive_key())
+        f = get_fernet()
         enc = f.encrypt(p12_path.read_bytes())
         p12_enc_path = user_dir / 'user.p12.enc'
         p12_enc_path.write_bytes(enc)

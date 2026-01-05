@@ -17,11 +17,28 @@ export async function login(username, password){
   return res.json()
 }
 
-export async function signPdf(file, creds){
-  const fd = new FormData(); fd.append('file', file)
-  if(creds && creds.username){ fd.append('username', creds.username); fd.append('password', creds.password) }
-  const res = await fetch('/api/sign/', {method:'POST', body:fd, credentials:'include', headers:{'X-CSRFToken': getCsrf()}})
-  if(!res.ok){ const txt = await res.text(); throw new Error(txt) }
+export async function signPdf(file, creds, options = {}){
+  const fd = new FormData(); 
+  fd.append('file', file)
+  if(creds && creds.username){ 
+    fd.append('username', creds.username); 
+    fd.append('password', creds.password) 
+  }
+  // Add signing options
+  if(options.reason) fd.append('reason', options.reason)
+  if(options.location) fd.append('location', options.location)
+  if(options.position) fd.append('position', options.position)
+  
+  const res = await fetch('/api/sign/', {
+    method:'POST', 
+    body:fd, 
+    credentials:'include', 
+    headers:{'X-CSRFToken': getCsrf()}
+  })
+  if(!res.ok){ 
+    const txt = await res.text(); 
+    throw new Error(txt) 
+  }
   const blob = await res.blob()
   return blob
 }

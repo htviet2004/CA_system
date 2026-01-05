@@ -27,7 +27,7 @@ def serve_react(request, path=''):
     return HttpResponseRedirect('http://localhost:3000' + request.path)
 
 
-# catch-all for client-side routes
+# catch-all for client-side routes (exclude admin and api)
 urlpatterns += [
-    re_path(r'^(?:.*)/?$', serve_react),
+    re_path(r'^(?!admin|api).*$', serve_react),
 ]

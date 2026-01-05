@@ -1,93 +1,115 @@
-import React, { useState } from 'react'
-import { register, login, signPdf } from './api'
+import React, { useState } from 'react';
+import { register, login, signPdf } from './api';
+import Header from './components/Header';
+import AuthForm from './components/AuthForm';
+import SignPDF from './components/SignPDF';
+import PDFVerifier from './components/PDFVerifier';
+import './static/styles/variables.css';
+import './static/styles/global.css';
+import './static/styles/components.css';
 
-export default function App(){
-  const [msg, setMsg] = useState('')
-  const [logged, setLogged] = useState({username:'', password:''})
+export default function App() {
+  const [msg, setMsg] = useState('');
+  const [msgType, setMsgType] = useState('');
+  const [logged, setLogged] = useState({ username: '', password: '' });
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('sign');
 
-  async function handleRegister(e){
-    e.preventDefault()
-    const u = e.target.username.value
-    const p = e.target.password.value
-    try{
-      await register(u,p)
-      setMsg('Registered '+u)
-    }catch(err){ setMsg('Register error: '+(err.message||err)) }
-  }
+  const showMessage = (message, type = 'success') => {
+    setMsg(message);
+    setMsgType(type);
+    setTimeout(() => {
+      setMsg('');
+      setMsgType('');
+    }, 5000);
+  };
 
-  async function handleLogin(e){
-    e.preventDefault()
-    const u = e.target.username.value
-    const p = e.target.password.value
-    try{
-      await login(u,p)
-      setLogged({username:u,password:p})
-      setMsg('Logged in '+u)
-    }catch(err){ setMsg('Login error: '+(err.message||err)) }
-  }
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    const username = e.target.username.value;
+    const password = e.target.password.value;
+    try {
+      await register(username, password);
+      showMessage(`Đăng ký thành công cho tài khoản: ${username}`, 'success');
+    } catch (err) {
+      showMessage(`Lỗi đăng ký: ${err.message || err}`, 'error');
+    }
+  };
 
-  async function handleSign(e){
-    e.preventDefault()
-    const file = e.target.file.files[0]
-    if(!file){ setMsg('Select a PDF file'); return }
-    try{
-      const blob = await signPdf(file, logged)
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = (file.name.replace(/\.pdf$/i,'')||'signed') + '_signed.pdf'
-      a.click()
-      setMsg('Signed successfully')
-    }catch(err){ setMsg('Sign error: '+(err.message||err)) }
-  }
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    const username = e.target.username.value;
+    const password = e.target.password.value;
+    try {
+      await login(username, password);
+      setLogged({ username, password });
+      setShowAuthModal(false);
+      showMessage(`Đăng nhập thành công: ${username}`, 'success');
+    } catch (err) {
+      showMessage(`Lỗi đăng nhập: ${err.message || err}`, 'error');
+    }
+  };
+
+  const handleSign = async (e) => {
+    e.preventDefault();
+    const file = e.target.file.files[0];
+    if (!file) {
+      showMessage('Vui lòng chọn file PDF', 'error');
+      return;
+    }
+    
+    const reason = e.target.reason?.value || 'Ký số tài liệu';
+    const location = e.target.location?.value || 'Việt Nam';
+    const position = e.target.position?.value || '';
+    
+    try {
+      const blob = await signPdf(file, logged, { reason, location, position });
+      
+      if (e.__signedCallback) {
+        e.__signedCallback(blob);
+      }
+      
+      showMessage('Ký số thành công!', 'success');
+    } catch (err) {
+      showMessage(`Lỗi ký số: ${err.message || err}`, 'error');
+    }
+  };
 
   return (
-    <div className="container">
-      <div className="header">
-        <div className="brand">
-          <span className="logo" />
-          <div>
-            <div className="title">CA System — PDF Signing</div>
-            <div className="muted">Issue, sign and verify PDFs with internal CA</div>
+    <div className="app-container">
+      <Header 
+        username={logged.username} 
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onAuthClick={() => setShowAuthModal(true)}
+        onLogout={() => setLogged({ username: '', password: '' })}
+      />
+      
+      <main className="main-content">
+        {activeTab === 'sign' ? (
+          <SignPDF onSign={handleSign} username={logged.username} />
+        ) : (
+          <PDFVerifier />
+        )}
+
+        {msg && (
+          <div className={`message ${msgType}`}>
+            {msg}
+          </div>
+        )}
+      </main>
+
+      {showAuthModal && (
+        <div className="modal-overlay" onClick={() => setShowAuthModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <AuthForm 
+              onRegister={handleRegister} 
+              onLogin={handleLogin}
+              onClose={() => setShowAuthModal(false)}
+            />
           </div>
         </div>
-        <div>
-          {logged.username ? <div className="muted">Signed in as <strong>{logged.username}</strong></div> : <div className="muted">Not signed in</div>}
-        </div>
-      </div>
-
-      <div className="card grid">
-        <section>
-          <h3>Register</h3>
-          <form onSubmit={handleRegister}>
-            <input name="username" placeholder="username" required />
-            <input name="password" type="password" placeholder="password" required />
-            <button type="submit">Create account</button>
-          </form>
-        </section>
-
-        <section>
-          <h3>Login</h3>
-          <form onSubmit={handleLogin}>
-            <input name="username" placeholder="username" required />
-            <input name="password" type="password" placeholder="password" required />
-            <button type="submit" className="secondary">Login</button>
-          </form>
-        </section>
-      </div>
-
-      <div className="card">
-        <h3>Sign PDF</h3>
-        <form onSubmit={handleSign}>
-          <input type="file" name="file" accept="application/pdf" />
-          <div style={{marginTop:8}}>
-            <button type="submit">Sign file</button>
-
-          </div>
-        </form>
-      </div>
-
-      <div className="msg">{msg}</div>
+      )}
     </div>
-  )
+  );
 }

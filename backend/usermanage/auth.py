@@ -1,8 +1,6 @@
 import os
 import subprocess
 import tempfile
-import hashlib
-import base64
 import sys
 import json
 from django.conf import settings
@@ -10,13 +8,13 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.models import User
-from cryptography.fernet import Fernet
 from usercerts.models import UserCert
+from signing.utils import get_fernet, derive_encryption_key
 
 
 def _derive_key():
-    digest = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
-    return base64.urlsafe_b64encode(digest)
+    """DEPRECATED: Use signing.utils.derive_encryption_key() instead"""
+    return derive_encryption_key()
 
 
 @csrf_exempt
@@ -167,7 +165,7 @@ def issue_cert(request):
     subprocess.run(['openssl', 'pkcs12', '-export', '-inkey', key_path, '-in', crt_path, '-certfile', interm_cert, '-out', p12_path, '-passout', f'pass:{passphrase}'], check=True)
 
     # encrypt p12 and passphrase using Fernet
-    f = Fernet(_derive_key())
+    f = get_fernet()
     with open(p12_path, 'rb') as fh:
         enc = f.encrypt(fh.read())
     with open(os.path.join(user_dir, 'user.p12.enc'), 'wb') as fh:

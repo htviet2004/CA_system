@@ -48,28 +48,44 @@ def main():
 
     # locate intermediate CA cert/key in common repo locations
     def find_intermediate_paths(root: Path):
-        # check old path
+        # Prioritize intermediateCA.crt over intermediate.crt
         candidates = [root / 'CA' / 'intermediate-ca', root / 'certs' / 'intermediate-ca', root / 'certs']
         for c in candidates:
-            cert1 = c / 'certs' / 'intermediate.crt'
-            cert2 = c / 'intermediate.crt'
-            cert3 = c / 'intermediateCA.crt'
+            # Try intermediateCA.crt first (proper intermediate CA)
+            cert1 = c / 'certs' / 'intermediateCA.crt'
             if cert1.exists():
-                # search for key
                 key = c / 'private' / 'intermediate.key'
-                return cert1, key
+                if key.exists():
+                    return cert1, key
+            
+            # Fallback to intermediate.crt
+            cert2 = c / 'certs' / 'intermediate.crt'
             if cert2.exists():
                 key = c / 'private' / 'intermediate.key'
-                return cert2, key
+                if key.exists():
+                    return cert2, key
+            
+            cert3 = c / 'intermediate.crt'
             if cert3.exists():
                 key = c / 'private' / 'intermediate.key'
                 return cert3, key
+                
+            cert4 = c / 'intermediateCA.crt'
+            if cert4.exists():
+                key = c / 'private' / 'intermediate.key'
+                return cert4, key
+        
         # fallback: try to find any matching files under root
         cert_found = None
         key_found = None
-        for p in root.rglob('intermediate*.crt'):
+        # Try intermediateCA first
+        for p in root.rglob('intermediateCA.crt'):
             cert_found = p
             break
+        if not cert_found:
+            for p in root.rglob('intermediate*.crt'):
+                cert_found = p
+                break
         for p in root.rglob('intermediate*.key'):
             key_found = p
             break
@@ -88,19 +104,37 @@ def main():
     try:
         messages.append('Generating key')
         subprocess.run(['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:2048', '-out', str(key_path)], check=True)
-        subj = f"/CN={username}/emailAddress={username}@dut.local"
+        
+        # Thông tin certificate chuẩn cho DUT
+        # Tùy chỉnh OU dựa vào role: Student, Faculty, Staff, Admin
+        subj = (
+            f"/C=VN"
+            f"/ST=Da Nang"
+            f"/L=Da Nang"
+            f"/O=Da Nang University of Science and Technology"
+            f"/OU=Student"  # Hoặc: Faculty, Staff, Admin
+            f"/CN={username}"
+            f"/emailAddress={username}@dut.udn.vn"
+        )
+        
         messages.append('Creating CSR')
         subprocess.run(['openssl', 'req', '-new', '-key', str(key_path), '-subj', subj, '-out', str(csr_path)], check=True)
         messages.append('Signing with intermediate CA')
-        # if user provided an extensions file, use it so keyUsage/extendedKeyUsage are set
+        
+        # Create v3 extension file if it doesn't exist
         extfile = user_dir / 'v3_ext.cnf'
-        if extfile.exists():
-            subprocess.run([
-                'openssl', 'x509', '-req', '-in', str(csr_path), '-CA', str(interm_cert), '-CAkey', str(interm_key),
-                '-CAcreateserial', '-out', str(crt_path), '-days', '365', '-sha256', '-extfile', str(extfile), '-extensions', 'v3_req'
-            ], check=True)
-        else:
-            subprocess.run(['openssl', 'x509', '-req', '-in', str(csr_path), '-CA', str(interm_cert), '-CAkey', str(interm_key), '-CAcreateserial', '-out', str(crt_path), '-days', '365', '-sha256'], check=True)
+        if not extfile.exists():
+            messages.append('Creating v3 extension file')
+            extfile.write_text("""[ v3_req ]
+keyUsage = critical, digitalSignature, nonRepudiation
+extendedKeyUsage = emailProtection, clientAuth
+""", encoding='utf-8')
+        
+        # Always use extensions file for proper keyUsage
+        subprocess.run([
+            'openssl', 'x509', '-req', '-in', str(csr_path), '-CA', str(interm_cert), '-CAkey', str(interm_key),
+            '-CAcreateserial', '-out', str(crt_path), '-days', '365', '-sha256', '-extfile', str(extfile), '-extensions', 'v3_req'
+        ], check=True)
         messages.append('Exporting PKCS#12')
         subprocess.run(['openssl', 'pkcs12', '-export', '-inkey', str(key_path), '-in', str(crt_path), '-certfile', str(interm_cert), '-out', str(p12_path), '-passout', f'pass:{passphrase}'], check=True)
 

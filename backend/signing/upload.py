@@ -3,14 +3,13 @@ from django.http import JsonResponse
 from django.conf import settings
 from django.contrib.auth import authenticate
 import os
-import hashlib
-import base64
-from cryptography.fernet import Fernet
+from signing.utils import get_fernet
 
 
 def _derive_key():
-    digest = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
-    return base64.urlsafe_b64encode(digest)
+    """DEPRECATED: Use signing.utils.derive_encryption_key() instead"""
+    from signing.utils import derive_encryption_key
+    return derive_encryption_key()
 
 
 @csrf_exempt
@@ -35,7 +34,7 @@ def upload_p12(request):
     os.makedirs(user_dir, exist_ok=True)
 
     # encrypt and store
-    f = Fernet(_derive_key())
+    f = get_fernet()
     enc_p12 = f.encrypt(p12_file.read())
     with open(os.path.join(user_dir, 'user.p12.enc'), 'wb') as fh:
         fh.write(enc_p12)
