@@ -1,3 +1,0 @@
-[ v3_req ]
-keyUsage = critical, digitalSignature, nonRepudiation
-extendedKeyUsage = emailProtection, clientAuth

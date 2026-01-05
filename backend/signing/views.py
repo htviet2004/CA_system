@@ -12,7 +12,9 @@ import traceback
 from .certificate_service import CertificateService
 from .pdf_signer import PDFSigner
 from .pdf_verifier import PDFVerifier
+from .pdf_stamp import PDFStampService
 from .utils import find_pyhanko_executable
+from datetime import datetime
 
 
 def _find_pyhanko(preferred=None):
@@ -95,24 +97,59 @@ def sign_file(request):
         out_fd, out_path = tempfile.mkstemp(suffix='.pdf')
         os.close(out_fd)
         
+        # Create temp file for stamped PDF (intermediate)
+        stamped_fd, stamped_path = tempfile.mkstemp(suffix='_stamped.pdf')
+        os.close(stamped_fd)
+        
         # Sign PDF using PDFSigner service
         try:
+            # BƯỚC 1: Thêm visual stamp trước
+            with PDFSigner(p12_data, passphrase, username) as temp_signer:
+                field_spec_temp = temp_signer.parse_position(position)
+                page_num = field_spec_temp.on_page
+                box = field_spec_temp.box
+            
+            print(f"[STAMP] Adding visual stamp at page {page_num}, box {box}")
+            
+            PDFStampService.add_stamp_to_pdf(
+                input_pdf_path=in_path,
+                output_pdf_path=stamped_path,
+                page_num=page_num,
+                box=box,
+                username=username,
+                timestamp=datetime.now(),
+                style='dut_professional'
+            )
+            
+            print(f"[STAMP] Visual stamp added to: {stamped_path}")
+            
+            # BƯỚC 2: Ký invisible signature hoặc field nhỏ 1x1
             with PDFSigner(p12_data, passphrase, username) as signer:
-                # Parse position
-                field_spec = signer.parse_position(position)
+                # Tạo invisible signature field (1x1 pixel ở góc)
+                x1, y1, x2, y2 = box
+                invisible_position = f"{page_num}/{x1},{y1},{x1+1},{y1+1}"
+                field_spec = signer.parse_position(invisible_position)
                 
-                # Sign
+                # Sign với invisible=True để không vẽ appearance
                 signer.sign_pdf(
-                    in_path,
+                    stamped_path,  # ← Sign PDF đã có stamp
                     out_path,
                     field_spec,
                     reason=reason,
-                    location=location
+                    location=location,
+                    invisible=True  # ← Invisible signature
                 )
             
+            print(f"[SIGN] Signature added, output: {out_path}")
+            
             # Validate output file
-            if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
+            if not os.path.exists(out_path):
+                raise ValueError(f'Signed PDF not created: {out_path}')
+            
+            if os.path.getsize(out_path) == 0:
                 raise ValueError('Signed PDF is empty')
+            
+            print(f"[SIGN] Output file validated: {os.path.getsize(out_path)} bytes")
             
             # Return signed PDF
             resp = FileResponse(
@@ -121,18 +158,22 @@ def sign_file(request):
                 filename=uploaded.name or 'signed.pdf'
             )
             
-            # Cleanup input temp file
+            # Cleanup temp files
             try:
                 os.unlink(in_path)
-            except Exception:
-                pass
+                os.unlink(stamped_path)
+            except Exception as e:
+                print(f"[WARN] Cleanup error: {e}")
             
             return resp
         
         except ValueError as e:
             # User-facing error (e.g., position validation)
+            print(f"[ERROR] Validation error: {e}")
             try:
                 os.unlink(in_path)
+                if os.path.exists(stamped_path):
+                    os.unlink(stamped_path)
                 if os.path.exists(out_path):
                     os.unlink(out_path)
             except Exception:
@@ -142,15 +183,17 @@ def sign_file(request):
         
         except Exception as e:
             # Internal error during signing
+            print(f"[ERROR] Signing failed: {type(e).__name__}: {str(e)}")
+            traceback.print_exc()
+            
             try:
                 os.unlink(in_path)
+                if os.path.exists(stamped_path):
+                    os.unlink(stamped_path)
                 if os.path.exists(out_path):
                     os.unlink(out_path)
             except Exception:
                 pass
-            
-            print(f"[ERROR] Signing failed: {type(e).__name__}: {str(e)}")
-            traceback.print_exc()
             
             return JsonResponse({
                 'error': 'Signing failed',

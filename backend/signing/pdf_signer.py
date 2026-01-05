@@ -145,7 +145,7 @@ class PDFSigner:
             return None
     
     def sign_pdf(self, input_path, output_path, field_spec, 
-                 reason='Signed', location='', use_timestamp=True):
+                 reason='Signed', location='', use_timestamp=True, invisible=False):
         """
         Ký PDF file
         
@@ -156,6 +156,7 @@ class PDFSigner:
             reason: Lý do ký
             location: Vị trí ký
             use_timestamp: Có sử dụng timestamp từ TSA không
+            invisible: Nếu True, không vẽ appearance (invisible signature)
             
         Raises:
             Exception: Nếu việc ký thất bại
@@ -181,26 +182,30 @@ class PDFSigner:
             if hasattr(signer_obj, 'cert_registry') and trust_roots:
                 signer_obj.cert_registry.extend(trust_roots)
         
-        # Tạo custom signature appearance
-        try:
-            stamp_style = self._create_signature_appearance()
-        except Exception as e:
-            print(f"[WARN] Could not create custom appearance: {e}. Using default.")
-            stamp_style = None
+        # Tạo custom signature appearance (CHỈ khi KHÔNG invisible)
+        stamp_style = None
+        if not invisible:
+            try:
+                stamp_style = self._create_signature_appearance()
+            except Exception as e:
+                print(f"[WARN] Could not create custom appearance: {e}. Using default.")
+                stamp_style = None
         
         # Tạo signature metadata với PAdES compliance
-        signature_meta = signers.PdfSignatureMetadata(
-            field_name=field_spec.sig_field_name,
-            name=self.username,
-            reason=reason,
-            location=location if location else 'Vietnam',
-            subfilter=ph_fields.SigSeedSubFilter.PADES,
-            # Thêm custom appearance nếu tạo thành công
-            **({
-                'stamp_style': stamp_style,
-                'use_pades_lta': True
-            } if stamp_style else {})
-        )
+        metadata_kwargs = {
+            'field_name': field_spec.sig_field_name,
+            'name': self.username,
+            'reason': reason,
+            'location': location if location else 'Vietnam',
+            'subfilter': ph_fields.SigSeedSubFilter.PADES,
+        }
+        
+        # Thêm stamp_style chỉ khi KHÔNG invisible
+        if stamp_style and not invisible:
+            metadata_kwargs['stamp_style'] = stamp_style
+            metadata_kwargs['use_pades_lta'] = True
+        
+        signature_meta = signers.PdfSignatureMetadata(**metadata_kwargs)
         
         # Attach a Time Stamp Authority (TSA) for trusted timestamps
         timestamper = None
@@ -229,14 +234,28 @@ class PDFSigner:
                   f"on page {field_spec.on_page}, box {field_spec.box}")
             
             with open(output_path, 'wb') as outf:
-                signers.sign_pdf(
-                    pdf_writer,
-                    signature_meta=signature_meta,
-                    signer=signer_obj,
-                    timestamper=timestamper,
-                    new_field_spec=field_spec,
-                    output=outf
-                )
+                if invisible:
+                    # For invisible signatures, don't create any field
+                    # pyHanko will add the signature without visual representation
+                    print("[SIGN] Adding invisible signature (no field)")
+                    signers.sign_pdf(
+                        pdf_writer,
+                        signature_meta=signature_meta,
+                        signer=signer_obj,
+                        timestamper=timestamper,
+                        existing_fields_only=False,
+                        output=outf
+                    )
+                else:
+                    # Normal visible signature with field
+                    signers.sign_pdf(
+                        pdf_writer,
+                        signature_meta=signature_meta,
+                        signer=signer_obj,
+                        timestamper=timestamper,
+                        new_field_spec=field_spec,
+                        output=outf
+                    )
         
         # Validate output file is non-empty
         if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
