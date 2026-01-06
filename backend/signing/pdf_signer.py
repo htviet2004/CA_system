@@ -8,15 +8,7 @@ from datetime import datetime
 from pyhanko.sign import signers, fields as ph_fields, timestamps as ph_timestamps
 from pyhanko.sign.fields import SigFieldSpec
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.stamp import TextStampStyle
 from django.conf import settings
-
-# Optional imports for advanced styling
-try:
-    from pyhanko.pdf_utils import text as pdf_text
-    HAS_TEXT_UTILS = True
-except ImportError:
-    HAS_TEXT_UTILS = False
 
 
 class PDFSigner:
@@ -106,44 +98,6 @@ class PDFSigner:
         except (ValueError, IndexError) as e:
             raise ValueError(f'Lỗi xử lý tọa độ chữ ký: {str(e)}')
     
-    def _create_signature_appearance(self):
-        """
-        Tạo signature appearance chuyên nghiệp với styling tùy chỉnh
-        
-        Returns:
-            TextStampStyle object hoặc None nếu không thể tạo
-        """
-        try:
-            # Màu sắc chuyên nghiệp
-            BLUE_LIGHT = (0.87, 0.92, 0.98)   # #dbeafe
-            BORDER_COLOR = (0.15, 0.39, 0.93) # #2563eb
-            
-            style_kwargs = {
-                'background': BLUE_LIGHT,
-                'border_width': 2,
-                'stamp_text': (
-                    '%(signer_name)s\n'
-                    'Ky so: %(ts)s\n'
-                    '-----------------\n'
-                    'Ly do: %(reason)s\n'
-                    'Vi tri: %(location)s'
-                ),
-                'border_color': BORDER_COLOR,
-            }
-            
-            # Chỉ thêm text_box_style nếu có text utils
-            if HAS_TEXT_UTILS:
-                style_kwargs['text_box_style'] = pdf_text.TextBoxStyle(
-                    font_size=9,
-                    leading=11,
-                    text_sep='\n'
-                )
-            
-            return TextStampStyle(**style_kwargs)
-        except Exception as e:
-            print(f"[WARN] Cannot create custom appearance: {e}")
-            return None
-    
     def sign_pdf(self, input_path, output_path, field_spec, 
                  reason='Signed', location='', use_timestamp=True, invisible=False):
         """
@@ -182,30 +136,14 @@ class PDFSigner:
             if hasattr(signer_obj, 'cert_registry') and trust_roots:
                 signer_obj.cert_registry.extend(trust_roots)
         
-        # Tạo custom signature appearance (CHỈ khi KHÔNG invisible)
-        stamp_style = None
-        if not invisible:
-            try:
-                stamp_style = self._create_signature_appearance()
-            except Exception as e:
-                print(f"[WARN] Could not create custom appearance: {e}. Using default.")
-                stamp_style = None
-        
         # Tạo signature metadata với PAdES compliance
-        metadata_kwargs = {
-            'field_name': field_spec.sig_field_name,
-            'name': self.username,
-            'reason': reason,
-            'location': location if location else 'Vietnam',
-            'subfilter': ph_fields.SigSeedSubFilter.PADES,
-        }
-        
-        # Thêm stamp_style chỉ khi KHÔNG invisible
-        if stamp_style and not invisible:
-            metadata_kwargs['stamp_style'] = stamp_style
-            metadata_kwargs['use_pades_lta'] = True
-        
-        signature_meta = signers.PdfSignatureMetadata(**metadata_kwargs)
+        signature_meta = signers.PdfSignatureMetadata(
+            field_name=field_spec.sig_field_name,
+            name=self.username,
+            reason=reason,
+            location=location if location else 'Vietnam',
+            subfilter=ph_fields.SigSeedSubFilter.PADES,
+        )
         
         # Attach a Time Stamp Authority (TSA) for trusted timestamps
         timestamper = None
