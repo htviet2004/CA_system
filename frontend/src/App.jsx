@@ -61,9 +61,19 @@ export default function App() {
     const reason = e.target.reason?.value || 'Ký số tài liệu';
     const location = e.target.location?.value || 'Việt Nam';
     const position = e.target.position?.value || '';
+    const signer_name = e.target.signer_name?.value || '';
+    const title = e.target.title?.value || '';
+    const custom_text = e.target.custom_text?.value || '';
     
     try {
-      const blob = await signPdf(file, logged, { reason, location, position });
+      const blob = await signPdf(file, logged, { 
+        reason, 
+        location, 
+        position,
+        signer_name,
+        title,
+        custom_text
+      });
       
       if (e.__signedCallback) {
         e.__signedCallback(blob);
