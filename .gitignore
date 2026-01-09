@@ -3,7 +3,7 @@
 __pycache__/
 *.py[cod]
 *.log
-backend/db.sqlite3
+C:\VIET\CA_system\backend\db.sqlite3
 
 # Env
 .env
