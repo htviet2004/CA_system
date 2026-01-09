@@ -28,6 +28,10 @@ export async function signPdf(file, creds, options = {}){
   if(options.reason) fd.append('reason', options.reason)
   if(options.location) fd.append('location', options.location)
   if(options.position) fd.append('position', options.position)
+  // Add stamp text customization
+  if(options.signer_name) fd.append('signer_name', options.signer_name)
+  if(options.title) fd.append('title', options.title)
+  if(options.custom_text) fd.append('custom_text', options.custom_text)
   
   const res = await fetch('/api/sign/', {
     method:'POST', 
