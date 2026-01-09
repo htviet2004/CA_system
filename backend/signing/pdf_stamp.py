@@ -74,6 +74,7 @@ class PDFStampService:
             text_config = {}
         
         signer_name = text_config.get('signer_name', username)
+        department = text_config.get('department', '')
         title = text_config.get('title', '')
         custom_text = text_config.get('custom_text', '')
         
@@ -116,6 +117,12 @@ class PDFStampService:
         c.setFont(FONT_BOLD, 9)
         c.drawString(text_x, current_y, signer_name)
         current_y -= 10
+        
+        # Department (nếu có)
+        if department:
+            c.setFont(FONT, 7)
+            c.drawString(text_x, current_y, department)
+            current_y -= 10
         
         # Title (nếu có)
         if title:

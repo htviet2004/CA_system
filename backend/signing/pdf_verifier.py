@@ -336,12 +336,13 @@ class PDFVerifier:
         }
     
     def _extract_signer_name(self, cert):
-        """Extract tên người ký từ certificate"""
+        """Extract tên người ký từ certificate và UserProfile"""
         if cert is None:
             return 'Unknown'
         
         try:
             subject = cert.subject
+            common_name = None
             
             # asn1crypto.x509.Name có method .native để lấy dict
             if hasattr(subject, 'native'):
@@ -349,27 +350,62 @@ class PDFVerifier:
                 # Thử các trường theo thứ tự ưu tiên
                 for key in ['common_name', 'organizational_unit_name', 'organization_name', 'email_address']:
                     if key in subject_dict and subject_dict[key]:
-                        return subject_dict[key]
+                        common_name = subject_dict[key]
+                        break
             
             # Fallback: dùng human_friendly nếu có
-            if hasattr(subject, 'human_friendly'):
+            if not common_name and hasattr(subject, 'human_friendly'):
                 human = subject.human_friendly
                 # Format: "CN=viet, emailAddress=viet@dut.local"
                 if 'CN=' in human:
                     parts = human.split(',')
                     for part in parts:
                         if 'CN=' in part:
-                            return part.split('CN=')[1].strip()
+                            common_name = part.split('CN=')[1].strip()
+                            break
             
             # Thử method chosen
-            if hasattr(subject, 'chosen'):
+            if not common_name and hasattr(subject, 'chosen'):
                 for rdn in subject.chosen:
                     for attr in rdn:
                         # attr có oid và value
                         if hasattr(attr, 'value'):
                             attr_val = attr.value
                             if hasattr(attr_val, 'native'):
-                                return attr_val.native
+                                common_name = attr_val.native
+                                break
+            
+            # Lookup UserProfile từ database để lấy thông tin chi tiết
+            if common_name:
+                try:
+                    from usermanage.models import UserProfile
+                    from django.contrib.auth.models import User
+                    
+                    # Tìm user theo username (CN thường là username)
+                    user = User.objects.filter(username=common_name).first()
+                    if user:
+                        profile = UserProfile.objects.filter(user=user).first()
+                        if profile:
+                            # Trả về thông tin từ UserProfile
+                            full_name = getattr(profile, 'full_name', '')
+                            department = getattr(profile, 'department', '')
+                            role = getattr(profile, 'role', '')
+                            
+                            # Format: "Full Name - Role - Department"
+                            parts = []
+                            if full_name:
+                                parts.append(full_name)
+                            if role:
+                                parts.append(role)
+                            if department:
+                                parts.append(department)
+                            
+                            if parts:
+                                return ' - '.join(parts)
+                except Exception as e:
+                    print(f"[WARN] Failed to lookup UserProfile: {e}")
+            
+            return common_name or 'Unknown'
                                 
         except Exception as e:
             print(f"[WARN] Cannot extract signer name: {e}")

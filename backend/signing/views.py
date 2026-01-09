@@ -15,6 +15,7 @@ from .pdf_verifier import PDFVerifier
 from .pdf_stamp import PDFStampService
 from .utils import find_pyhanko_executable
 from datetime import datetime
+from usermanage.models import UserProfile
 
 
 def _find_pyhanko(preferred=None):
@@ -111,19 +112,30 @@ def sign_file(request):
             
             print(f"[STAMP] Adding visual stamp at page {page_num}, box {box}")
             
-            # Parse text_config từ request
+            # Parse text_config từ request hoặc lấy từ UserProfile
             import json
             text_config = None
-            signer_name = request.POST.get('signer_name', '').strip()
-            title = request.POST.get('title', '').strip()
+            
+            # Lấy thông tin từ UserProfile nếu có
+            try:
+                profile = UserProfile.objects.get(user=user)
+                signer_name = request.POST.get('signer_name', '').strip() or getattr(profile, 'full_name', '') or username
+                department = getattr(profile, 'department', '') or ''
+                title = request.POST.get('title', '').strip() or getattr(profile, 'role', '') or ''
+            except UserProfile.DoesNotExist:
+                signer_name = request.POST.get('signer_name', '').strip() or username
+                department = ''
+                title = request.POST.get('title', '').strip()
+            
             custom_text = request.POST.get('custom_text', '').strip()
             
-            if signer_name or title or custom_text:
-                text_config = {
-                    'signer_name': signer_name if signer_name else username,
-                    'title': title,
-                    'custom_text': custom_text
-                }
+            # Tạo text_config với thông tin từ profile
+            text_config = {
+                'signer_name': signer_name,
+                'department': department,
+                'title': title,
+                'custom_text': custom_text
+            }
             
             PDFStampService.add_stamp_to_pdf(
                 input_pdf_path=in_path,
