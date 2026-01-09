@@ -46,3 +46,32 @@ export async function signPdf(file, creds, options = {}){
   const blob = await res.blob()
   return blob
 }
+
+export async function updateProfile(payload){
+  const res = await fetch('/api/usermanage/profile/update/', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrf(),
+    },
+    body: JSON.stringify(payload),
+  })
+  if(!res.ok){
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+export async function fetchProfile(username){
+  const res = await fetch(`/api/usermanage/profile/${encodeURIComponent(username)}/`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if(!res.ok){
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}

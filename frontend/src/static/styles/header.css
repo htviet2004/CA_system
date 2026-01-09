@@ -156,6 +156,61 @@
   box-shadow: var(--shadow-md);
 }
 
+.btn-profile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 36px;
+  height: 36px;
+
+  margin-right: 8px;
+
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: transparent;
+
+  color: #ffffff;
+  cursor: pointer;
+
+  transition: all 0.2s ease;
+}
+
+.btn-profile:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.btn-profile:active {
+  transform: scale(0.95);
+}
+
+.btn-profile {
+  position: relative;
+}
+
+.btn-profile::after {
+  content: "Chỉnh sửa thông tin";
+  position: absolute;
+  bottom: -34px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  background: #222;
+  color: #fff;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.btn-profile:hover::after {
+  opacity: 1;
+}
+
 .user-status {
   color: var(--gray-500);
   font-size: 0.875rem;
