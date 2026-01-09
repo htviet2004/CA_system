@@ -4,6 +4,7 @@ import Header from './components/Header';
 import AuthForm from './components/AuthForm';
 import SignPDF from './components/SignPDF';
 import PDFVerifier from './components/PDFVerifier';
+import UserProfile from './components/UserProfile';
 import './static/styles/variables.css';
 import './static/styles/global.css';
 import './static/styles/components.css';
@@ -83,15 +84,22 @@ export default function App() {
         onTabChange={setActiveTab}
         onAuthClick={() => setShowAuthModal(true)}
         onLogout={() => setLogged({ username: '', password: '' })}
+        onEditProfile={() => setActiveTab('profile')} 
       />
       
       <main className="main-content">
-        {activeTab === 'sign' ? (
+        {activeTab === 'sign' && (
           <SignPDF onSign={handleSign} username={logged.username} />
-        ) : (
+        )}
+
+        {activeTab === 'verify' && (
           <PDFVerifier />
         )}
 
+        {activeTab === 'profile' && (
+          <UserProfile username={logged.username} onBack={() => setActiveTab('sign')} showMessage={showMessage} />
+        )}
+        
         {msg && (
           <div className={`message ${msgType}`}>
             {msg}

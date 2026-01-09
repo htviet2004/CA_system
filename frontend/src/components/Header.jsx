@@ -1,8 +1,22 @@
 import React from 'react';
-import { Shield, PenTool, CheckCircle, LogIn, LogOut } from 'lucide-react';
+import {
+  Shield,
+  PenTool,
+  CheckCircle,
+  LogIn,
+  LogOut,
+  User
+} from 'lucide-react';
 import '../static/styles/header.css';
 
-export default function Header({ username, activeTab, onTabChange, onAuthClick, onLogout }) {
+export default function Header({
+  username,
+  activeTab,
+  onTabChange,
+  onAuthClick,
+  onLogout,
+  onEditProfile
+}) {
   return (
     <header className="header">
       <div className="header-content">
@@ -17,14 +31,14 @@ export default function Header({ username, activeTab, onTabChange, onAuthClick, 
         </div>
 
         <nav className="header-nav">
-          <button 
+          <button
             className={`nav-tab ${activeTab === 'sign' ? 'active' : ''}`}
             onClick={() => onTabChange('sign')}
           >
             <PenTool size={18} />
             Ký số
           </button>
-          <button 
+          <button
             className={`nav-tab ${activeTab === 'verify' ? 'active' : ''}`}
             onClick={() => onTabChange('verify')}
           >
@@ -36,9 +50,24 @@ export default function Header({ username, activeTab, onTabChange, onAuthClick, 
         <div className="header-user">
           {username ? (
             <div className="user-info">
-              <div className="user-avatar">{username.charAt(0).toUpperCase()}</div>
+              <button
+                className="btn-profile"
+                onClick={onEditProfile}
+                title="Chỉnh sửa thông tin"
+              >
+                <User size={18} />
+              </button>
+
+              <div className="user-avatar">
+                {username.charAt(0).toUpperCase()}
+              </div>
               <span className="user-name">{username}</span>
-              <button className="btn-logout" onClick={onLogout} title="Đăng xuất">
+
+              <button
+                className="btn-logout"
+                onClick={onLogout}
+                title="Đăng xuất"
+              >
                 <LogOut size={18} />
               </button>
             </div>
