@@ -329,6 +329,63 @@
   flex-shrink: 0;
 }
 
+/* Stamp Text Customization Section */
+.stamp-text-section {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.stamp-text-section h4 {
+  color: #0369a1;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.section-hint {
+  color: #0c4a6e;
+  font-size: 0.8125rem;
+  margin: 0 0 1rem 0;
+  opacity: 0.85;
+}
+
+.field-hint {
+  display: block;
+  color: #64748b;
+  font-size: 0.75rem;
+  margin-top: 0.35rem;
+  font-style: italic;
+}
+
+.stamp-text-section .form-group {
+  margin-bottom: 1rem;
+}
+
+.stamp-text-section .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.stamp-text-section label {
+  color: #075985;
+  font-weight: 500;
+}
+
+.stamp-text-section input {
+  border-color: #bae6fd;
+  background: white;
+}
+
+.stamp-text-section input:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.1);
+}
+
 @media (max-width: 768px) {
   .sign-card {
     padding: 1.25rem;

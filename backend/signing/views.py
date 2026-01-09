@@ -111,6 +111,20 @@ def sign_file(request):
             
             print(f"[STAMP] Adding visual stamp at page {page_num}, box {box}")
             
+            # Parse text_config từ request
+            import json
+            text_config = None
+            signer_name = request.POST.get('signer_name', '').strip()
+            title = request.POST.get('title', '').strip()
+            custom_text = request.POST.get('custom_text', '').strip()
+            
+            if signer_name or title or custom_text:
+                text_config = {
+                    'signer_name': signer_name if signer_name else username,
+                    'title': title,
+                    'custom_text': custom_text
+                }
+            
             PDFStampService.add_stamp_to_pdf(
                 input_pdf_path=in_path,
                 output_pdf_path=stamped_path,
@@ -118,7 +132,8 @@ def sign_file(request):
                 box=box,
                 username=username,
                 timestamp=datetime.now(),
-                style='dut_professional'
+                style='dut_professional',
+                text_config=text_config
             )
             
             print(f"[STAMP] Visual stamp added to: {stamped_path}")
