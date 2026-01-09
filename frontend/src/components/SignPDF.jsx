@@ -54,6 +54,11 @@ export default function SignPDF({ onSign, username }) {
       const positionValue = signatureArea ? `${signatureArea.page}/${signatureArea.x1},${signatureArea.y1},${signatureArea.x2},${signatureArea.y2}` : '';
       console.log('Submitting with position:', positionValue);
       console.log('Signature area:', signatureArea);
+      console.log('Text config:', {
+        signer_name: signOptions.signerName,
+        title: signOptions.title,
+        custom_text: signOptions.customText
+      });
       
       const mockEvent = {
         preventDefault: () => {},
@@ -61,7 +66,10 @@ export default function SignPDF({ onSign, username }) {
           file: { files: [selectedFile] },
           reason: { value: signOptions.reason },
           location: { value: signOptions.location },
-          position: { value: positionValue }
+          position: { value: positionValue },
+          signer_name: { value: signOptions.signerName || '' },
+          title: { value: signOptions.title || '' },
+          custom_text: { value: signOptions.customText || '' }
         },
         __signedCallback: (blob) => {
           const url = URL.createObjectURL(blob);
@@ -182,6 +190,47 @@ export default function SignPDF({ onSign, username }) {
 
               {showAdvanced && (
                 <div className="advanced-options">
+                  <div className="stamp-text-section">
+                    <h4>📝 Tùy chỉnh nội dung hiển thị trong stamp</h4>
+                    <p className="section-hint">Các trường dưới đây sẽ hiển thị trong chữ ký điện tử trên PDF</p>
+                    
+                    <div className="form-group">
+                      <label htmlFor="signerName">Tên người ký (hiển thị trên stamp)</label>
+                      <input
+                        type="text"
+                        id="signerName"
+                        value={signOptions.signerName || ''}
+                        onChange={(e) => setSignOptions({...signOptions, signerName: e.target.value})}
+                        placeholder={`Mặc định: ${username}`}
+                      />
+                      <small className="field-hint">Để trống để dùng username hiện tại</small>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="title">Chức danh / Vai trò</label>
+                      <input
+                        type="text"
+                        id="title"
+                        value={signOptions.title || ''}
+                        onChange={(e) => setSignOptions({...signOptions, title: e.target.value})}
+                        placeholder="VD: Giám đốc, Trưởng phòng, Phó giám đốc..."
+                      />
+                      <small className="field-hint">Hiển thị dưới tên người ký</small>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="customText">Dòng chữ tùy chọn</label>
+                      <input
+                        type="text"
+                        id="customText"
+                        value={signOptions.customText || ''}
+                        onChange={(e) => setSignOptions({...signOptions, customText: e.target.value})}
+                        placeholder="VD: Đã phê duyệt, Đã xét duyệt, Đồng ý..."
+                      />
+                      <small className="field-hint">Hiển thị bên dưới (màu xanh, in nghiêng)</small>
+                    </div>
+                  </div>
+
                   <div className="form-group">
                     <label htmlFor="reason">Lý do ký</label>
                     <input

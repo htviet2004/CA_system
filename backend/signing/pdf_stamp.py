@@ -9,15 +9,31 @@ import io
 import os
 from reportlab.pdfgen import canvas
 from reportlab.lib.colors import HexColor
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from pypdf import PdfReader, PdfWriter
 from datetime import datetime
+
+# Đăng ký font Unicode để hỗ trợ tiếng Việt
+try:
+    # Thử sử dụng font Arial Unicode (có sẵn trên Windows)
+    pdfmetrics.registerFont(TTFont('ArialUnicode', 'arial.ttf'))
+    pdfmetrics.registerFont(TTFont('ArialUnicode-Bold', 'arialbd.ttf'))
+    FONT = 'ArialUnicode'
+    FONT_BOLD = 'ArialUnicode-Bold'
+    print("[FONT] Using Arial Unicode for Vietnamese support")
+except:
+    # Fallback: dùng Helvetica (không có tiếng Việt)
+    FONT = 'Helvetica'
+    FONT_BOLD = 'Helvetica-Bold'
+    print("[FONT] Warning: Arial not found, using Helvetica (no Vietnamese support)")
 
 
 class PDFStampService:
     """Service để thêm visual stamp vào PDF"""
     
     @staticmethod
-    def create_stamp_overlay(box, username, timestamp=None, style='dut_professional'):
+    def create_stamp_overlay(box, username, timestamp=None, style='dut_professional', text_config=None):
         """
         Tạo PDF overlay chứa visual stamp
         
@@ -26,6 +42,12 @@ class PDFStampService:
             username: Tên người ký
             timestamp: Thời gian (datetime object)
             style: Style của stamp
+            text_config: Dict chứa text tùy chỉnh
+                {
+                    'signer_name': 'Nguyễn Văn A',  # Tên người ký (thay thế username)
+                    'title': 'Giám đốc',  # Chức danh
+                    'custom_text': 'Đã phê duyệt'  # Dòng chữ tùy chọn
+                }
             
         Returns:
             bytes: PDF data chứa stamp overlay
@@ -40,20 +62,21 @@ class PDFStampService:
         c = canvas.Canvas(buffer, pagesize=(595, 842))  # A4 standard
         
         # Vẽ stamp tại vị trí (x1, y1) trên page
-        if style == 'dut_professional':
-            PDFStampService._draw_dut_stamp(c, x1, y1, width, height, username, timestamp)
-        elif style == 'minimal':
-            PDFStampService._draw_minimal_stamp(c, x1, y1, width, height, username, timestamp)
-        else:
-            PDFStampService._draw_simple_stamp(c, x1, y1, width, height, username, timestamp)
+        PDFStampService._draw_dut_stamp(c, x1, y1, width, height, username, timestamp, text_config)
         
         c.save()
         buffer.seek(0)
         return buffer.getvalue()
     
     @staticmethod
-    def _draw_dut_stamp(c, x, y, width, height, username, timestamp):
-        """Vẽ stamp style Adobe Sign - chuyên nghiệp, tối giản"""
+    def _draw_dut_stamp(c, x, y, width, height, username, timestamp, text_config=None):
+        if text_config is None:
+            text_config = {}
+        
+        signer_name = text_config.get('signer_name', username)
+        title = text_config.get('title', '')
+        custom_text = text_config.get('custom_text', '')
+        
         # Background trắng với viền xanh nhạt
         c.setFillColor(HexColor('#ffffff'))
         c.rect(x, y, width, height, fill=1, stroke=0)
@@ -82,69 +105,44 @@ class PDFStampService:
         text_x = x + 28
         c.setFillColor(HexColor('#000000'))
         
-        # Main text: "Digitally signed by"
-        c.setFont("Helvetica", 7)
-        c.drawString(text_x, y + height - 15, "Digitally signed by")
+        current_y = y + height - 15
         
-        # Username (bold, lớn hơn)
-        c.setFont("Helvetica-Bold", 9)
-        c.drawString(text_x, y + height - 28, username)
+        # Main text: "Digitally signed by"
+        c.setFont(FONT, 7)
+        c.drawString(text_x, current_y, "Digitally signed by")
+        current_y -= 13
+        
+        # Signer name (bold, lớn hơn)
+        c.setFont(FONT_BOLD, 9)
+        c.drawString(text_x, current_y, signer_name)
+        current_y -= 10
+        
+        # Title (nếu có)
+        if title:
+            c.setFont(FONT, 7)
+            c.drawString(text_x, current_y, title)
+            current_y -= 10
+        
+        # Custom text (nếu có)
+        if custom_text:
+            c.setFont(FONT, 7)  # Không dùng Oblique vì font custom không có
+            c.setFillColor(HexColor('#0078d4'))
+            c.drawString(text_x, current_y, custom_text)
+            current_y -= 10
+            c.setFillColor(HexColor('#000000'))
         
         # Date
-        c.setFont("Helvetica", 7)
-        ts = timestamp.strftime("%Y-%m-%d %H:%M:%S %Z") if timestamp else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        c.drawString(text_x, y + height - 40, f"Date: {ts}")
-        
-        # Organization (optional)
-        c.setFont("Helvetica", 6)
-        c.setFillColor(HexColor('#666666'))
-        c.drawString(text_x, y + height - 52, "Da Nang University of Science and Technology")
+        c.setFont(FONT, 7)
+        ts = timestamp.strftime("%Y-%m-%d %H:%M:%S") if timestamp else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        c.drawString(text_x, current_y, f"Date: {ts}")
         
         # Footer - validation indicator
-        c.setFont("Helvetica", 6)
+        c.setFont(FONT, 6)
         c.setFillColor(HexColor('#0078d4'))
         c.drawString(x + 5, y + 5, "Valid digital signature")
     
     @staticmethod
-    def _draw_minimal_stamp(c, x, y, width, height, username, timestamp):
-        """Vẽ stamp tối giản"""
-        # Background xám nhạt
-        c.setFillColor(HexColor('#f3f4f6'))
-        c.rect(x, y, width, height, fill=1, stroke=0)
-        
-        # Border xám
-        c.setStrokeColor(HexColor('#9ca3af'))
-        c.setLineWidth(1)
-        c.rect(x, y, width, height, fill=0, stroke=1)
-        
-        # Text đen
-        c.setFillColor(HexColor('#000000'))
-        c.setFont("Helvetica", 8)
-        
-        ts = timestamp.strftime("%Y-%m-%d %H:%M") if timestamp else datetime.now().strftime("%Y-%m-%d %H:%M")
-        
-        c.drawString(x + 5, y + height - 15, f"Signed by: {username}")
-        c.drawString(x + 5, y + height - 28, f"Date: {ts}")
-    
-    @staticmethod
-    def _draw_simple_stamp(c, x, y, width, height, username, timestamp):
-        """Vẽ stamp đơn giản"""
-        # Border đen
-        c.setStrokeColor(HexColor('#000000'))
-        c.setLineWidth(1)
-        c.rect(x, y, width, height, fill=0, stroke=1)
-        
-        # Text
-        c.setFillColor(HexColor('#000000'))
-        c.setFont("Helvetica", 8)
-        
-        ts = timestamp.strftime("%Y-%m-%d %H:%M:%S") if timestamp else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        c.drawString(x + 5, y + height - 15, f"{username}")
-        c.drawString(x + 5, y + height - 28, f"{ts}")
-    
-    @staticmethod
-    def add_stamp_to_pdf(input_pdf_path, output_pdf_path, page_num, box, username, timestamp=None, style='dut_professional'):
+    def add_stamp_to_pdf(input_pdf_path, output_pdf_path, page_num, box, username, timestamp=None, style='dut_professional', text_config=None):
         """
         Thêm visual stamp vào PDF
         
@@ -156,12 +154,13 @@ class PDFStampService:
             username: Tên người ký
             timestamp: Thời gian
             style: Style stamp
+            text_config: Dict chứa text tùy chỉnh
             
         Returns:
             str: Đường dẫn file output
         """
         # Tạo stamp overlay
-        stamp_pdf_data = PDFStampService.create_stamp_overlay(box, username, timestamp, style)
+        stamp_pdf_data = PDFStampService.create_stamp_overlay(box, username, timestamp, style, text_config)
         
         # Đọc PDF gốc
         reader = PdfReader(input_pdf_path)
