@@ -1,4 +1,5 @@
 from django.contrib import admin
+import backend.admin_register  # ensure all models are registered in admin
 from django.urls import path, include
 from django.views.generic import TemplateView
 from django.conf import settings
