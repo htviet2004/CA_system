@@ -7,7 +7,6 @@ from signing.utils import get_fernet
 
 
 def _derive_key():
-    """DEPRECATED: Use signing.utils.derive_encryption_key() instead"""
     from signing.utils import derive_encryption_key
     return derive_encryption_key()
 
@@ -33,7 +32,6 @@ def upload_p12(request):
     user_dir = os.path.join(settings.BASE_DIR, 'users', username)
     os.makedirs(user_dir, exist_ok=True)
 
-    # encrypt and store
     f = get_fernet()
     enc_p12 = f.encrypt(p12_file.read())
     with open(os.path.join(user_dir, 'user.p12.enc'), 'wb') as fh:

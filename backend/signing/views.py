@@ -1,6 +1,4 @@
-"""
-Signing views - Simplified version using service classes
-"""
+
 from django.conf import settings
 from django.http import JsonResponse, FileResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -19,52 +17,36 @@ from usermanage.models import UserProfile
 
 
 def _find_pyhanko(preferred=None):
-    """DEPRECATED: Use utils.find_pyhanko_executable instead"""
     return find_pyhanko_executable(preferred)
 
 
 @csrf_exempt
 def sign_file(request):
-    """
-    Ký file PDF với chữ ký số
     
-    POST parameters:
-        - file: PDF file để ký
-        - username, password: Thông tin đăng nhập (nếu chưa authenticated)
-        - position: Vị trí chữ ký (format: "page/x1,y1,x2,y2")
-        - reason: Lý do ký (optional)
-        - location: Vị trí ký (optional)
-    """
     try:
-        # Handle CORS preflight requests
         if request.method == 'OPTIONS':
             return JsonResponse({'ok': True})
 
         if request.method != 'POST':
             return JsonResponse({'error': 'POST only'}, status=405)
 
-        # Validate uploaded file
         uploaded = request.FILES.get('file')
         if not uploaded:
             return JsonResponse({'error': 'no file uploaded'}, status=400)
 
-        # Get signing options
         reason = request.POST.get('reason', 'Signed')
         location = request.POST.get('location', '')
         position = request.POST.get('position', '')
         
-        # Authenticate user
         user = _authenticate_user(request)
         if not user:
             return JsonResponse({'error': 'authentication required'}, status=401)
         
         username = user.username
         
-        # Find user certificate
         cert_service = CertificateService()
         enc_p12, enc_pass = cert_service.find_user_certificate(user, username)
         
-        # Auto-issue certificate if not found
         if not enc_p12 or not enc_pass:
             try:
                 password = request.POST.get('password')
@@ -82,10 +64,8 @@ def sign_file(request):
                 'error': 'no user certificate available'
             }, status=400)
         
-        # Decrypt certificate
         p12_data, passphrase = cert_service.decrypt_certificate(enc_p12, enc_pass)
         
-        # Save uploaded PDF to temp file
         in_tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
         try:
             for chunk in uploaded.chunks():
@@ -98,13 +78,10 @@ def sign_file(request):
         out_fd, out_path = tempfile.mkstemp(suffix='.pdf')
         os.close(out_fd)
         
-        # Create temp file for stamped PDF (intermediate)
         stamped_fd, stamped_path = tempfile.mkstemp(suffix='_stamped.pdf')
         os.close(stamped_fd)
         
-        # Sign PDF using PDFSigner service
         try:
-            # BƯỚC 1: Thêm visual stamp trước
             with PDFSigner(p12_data, passphrase, username) as temp_signer:
                 field_spec_temp = temp_signer.parse_position(position)
                 page_num = field_spec_temp.on_page
@@ -112,11 +89,9 @@ def sign_file(request):
             
             print(f"[STAMP] Adding visual stamp at page {page_num}, box {box}")
             
-            # Parse text_config từ request hoặc lấy từ UserProfile
             import json
             text_config = None
             
-            # Lấy thông tin từ UserProfile nếu có
             try:
                 profile = UserProfile.objects.get(user=user)
                 signer_name = request.POST.get('signer_name', '').strip() or getattr(profile, 'full_name', '') or username
@@ -129,7 +104,6 @@ def sign_file(request):
             
             custom_text = request.POST.get('custom_text', '').strip()
             
-            # Tạo text_config với thông tin từ profile
             text_config = {
                 'signer_name': signer_name,
                 'department': department,
@@ -150,26 +124,22 @@ def sign_file(request):
             
             print(f"[STAMP] Visual stamp added to: {stamped_path}")
             
-            # BƯỚC 2: Ký invisible signature hoặc field nhỏ 1x1
             with PDFSigner(p12_data, passphrase, username) as signer:
-                # Tạo invisible signature field (1x1 pixel ở góc)
                 x1, y1, x2, y2 = box
                 invisible_position = f"{page_num}/{x1},{y1},{x1+1},{y1+1}"
                 field_spec = signer.parse_position(invisible_position)
                 
-                # Sign với invisible=True để không vẽ appearance
                 signer.sign_pdf(
-                    stamped_path,  # ← Sign PDF đã có stamp
+                    stamped_path,
                     out_path,
                     field_spec,
                     reason=reason,
                     location=location,
-                    invisible=True  # ← Invisible signature
+                    invisible=True
                 )
             
             print(f"[SIGN] Signature added, output: {out_path}")
             
-            # Validate output file
             if not os.path.exists(out_path):
                 raise ValueError(f'Signed PDF not created: {out_path}')
             
@@ -178,14 +148,12 @@ def sign_file(request):
             
             print(f"[SIGN] Output file validated: {os.path.getsize(out_path)} bytes")
             
-            # Return signed PDF
             resp = FileResponse(
                 open(out_path, 'rb'),
                 as_attachment=True,
                 filename=uploaded.name or 'signed.pdf'
             )
             
-            # Cleanup temp files
             try:
                 os.unlink(in_path)
                 os.unlink(stamped_path)
@@ -195,7 +163,6 @@ def sign_file(request):
             return resp
         
         except ValueError as e:
-            # User-facing error (e.g., position validation)
             print(f"[ERROR] Validation error: {e}")
             try:
                 os.unlink(in_path)
@@ -209,7 +176,6 @@ def sign_file(request):
             return JsonResponse({'error': str(e)}, status=400)
         
         except Exception as e:
-            # Internal error during signing
             print(f"[ERROR] Signing failed: {type(e).__name__}: {str(e)}")
             traceback.print_exc()
             
@@ -238,12 +204,7 @@ def sign_file(request):
 
 @csrf_exempt
 def verify_pdf(request):
-    """
-    Xác thực chữ ký PDF và trả về thông tin chi tiết
     
-    POST parameters:
-        - file: PDF file cần xác thực
-    """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST only'}, status=405)
 
@@ -251,7 +212,6 @@ def verify_pdf(request):
     if not uploaded:
         return JsonResponse({'error': 'No file uploaded'}, status=400)
 
-    # Save to temp file
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
     try:
         for chunk in uploaded.chunks():
@@ -262,7 +222,6 @@ def verify_pdf(request):
         tmp.close()
 
     try:
-        # Verify using PDFVerifier service
         verifier = PDFVerifier()
         result = verifier.verify(tmp_path)
         return JsonResponse(result)
@@ -286,12 +245,7 @@ def verify_pdf(request):
 
 @csrf_exempt
 def get_pdf_info(request):
-    """
-    Lấy thông tin cơ bản về PDF (số trang, signatures, metadata)
     
-    POST parameters:
-        - file: PDF file
-    """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST only'}, status=405)
     
@@ -320,7 +274,6 @@ def get_pdf_info(request):
                 'metadata': {}
             }
             
-            # Get page count
             try:
                 pages = reader.root.get('/Pages')
                 if pages and '/Kids' in pages:
@@ -328,7 +281,6 @@ def get_pdf_info(request):
             except Exception:
                 info['page_count'] = None
 
-            # Check for signatures
             if '/AcroForm' in reader.root and '/Fields' in reader.root['/AcroForm']:
                 fields = reader.root['/AcroForm']['/Fields']
                 for field in fields:
@@ -338,7 +290,6 @@ def get_pdf_info(request):
                         field_name = field_obj.get('/T', 'Unknown')
                         info['signature_fields'].append(str(field_name))
 
-            # Get metadata
             if '/Info' in reader.root:
                 metadata = reader.root['/Info']
                 for key in ['/Title', '/Author', '/Subject', '/Creator', '/Producer']:
@@ -358,17 +309,10 @@ def get_pdf_info(request):
 
 
 def _authenticate_user(request):
-    """
-    Helper để authenticate user từ session hoặc POST parameters
     
-    Returns:
-        User object hoặc None
-    """
-    # Prefer session-based auth
     if hasattr(request, 'user') and request.user.is_authenticated:
         return request.user
     
-    # Fall back to username/password in POST
     username = request.POST.get('username')
     password = request.POST.get('password')
     

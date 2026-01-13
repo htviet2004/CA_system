@@ -72,7 +72,6 @@ def reset_password(request, username):
         u = User.objects.get(username=username)
     except User.DoesNotExist:
         return JsonResponse({'error': 'not found'}, status=404)
-    # generate temporary password
     temp = secrets.token_urlsafe(8)
     u.set_password(temp)
     u.save()

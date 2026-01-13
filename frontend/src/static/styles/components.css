@@ -1,4 +1,4 @@
-/* Buttons */
+
 .btn {
   display: flex;
   align-items: center;
@@ -62,7 +62,7 @@
   margin-top: 1rem;
 }
 
-/* Alerts */
+
 .alert {
   display: flex;
   align-items: flex-start;
@@ -93,7 +93,7 @@
   font-size: 0.875rem;
 }
 
-/* Messages */
+
 .message {
   padding: 0.75rem 1rem;
   border-radius: 8px;

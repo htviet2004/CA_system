@@ -13,7 +13,6 @@ from signing.utils import get_fernet, derive_encryption_key
 
 
 def _derive_key():
-    """DEPRECATED: Use signing.utils.derive_encryption_key() instead"""
     return derive_encryption_key()
 
 
@@ -32,14 +31,12 @@ def register(request):
     if full_name:
         user.first_name = full_name
         user.save()
-    # attempt to automatically issue a certificate for the new user using the local script
     issued = False
     issue_output = ''
     try:
         script = os.path.join(settings.BASE_DIR, 'scripts', 'issue_cert.py')
         proc = subprocess.run([sys.executable, str(script), username, password], capture_output=True, text=True)
         issue_output = (proc.stdout or '') + (proc.stderr or '')
-        # try to extract JSON at end of stdout (script prints JSON result)
         parsed = None
         out = proc.stdout or ''
         jidx = out.rfind('{')
@@ -57,7 +54,6 @@ def register(request):
         issued = False
         if parsed and parsed.get('ok'):
             issued = True
-            # create UserCert record if possible
             try:
                 p12_enc = parsed.get('p12_enc_path')
                 pass_enc = parsed.get('p12_pass_enc_path')
@@ -71,7 +67,6 @@ def register(request):
                     pass_rel = pass_enc
                 UserCert.objects.create(user=user, common_name=username, p12_enc_path=p12_rel or '', p12_pass_enc_path=pass_rel or '', active=True)
             except Exception:
-                # swallow DB errors; issuance itself succeeded
                 pass
     except Exception as e:
         issue_output = str(e)
@@ -94,7 +89,6 @@ def login_view(request):
 
 @csrf_exempt
 def issue_cert(request):
-    """Issue a certificate for a registered user and store encrypted PKCS#12."""
     if request.method != 'POST':
         return JsonResponse({'error': 'POST only'}, status=405)
     username = request.POST.get('username')
@@ -109,7 +103,6 @@ def issue_cert(request):
     user_dir = os.path.join(settings.BASE_DIR, 'users', username)
     os.makedirs(user_dir, exist_ok=True)
 
-    # locate intermediate CA cert/key in common repo locations
     project_root = settings.BASE_DIR
     def _find_intermediate():
         candidates = [
@@ -128,7 +121,6 @@ def issue_cert(request):
                 return cert2, key
             if os.path.exists(cert3) and os.path.exists(key):
                 return cert3, key
-        # fallback: search
         cert_found = None
         key_found = None
         for root, dirs, files in os.walk(project_root):
@@ -150,21 +142,16 @@ def issue_cert(request):
     crt_path = os.path.join(user_dir, f'{username}.crt')
     p12_path = os.path.join(user_dir, f'{username}.p12')
 
-    # generate key
     subprocess.run(['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:2048', '-out', key_path], check=True)
-    # generate csr
     subj = f"/CN={common_name}/emailAddress={username}@dut.local"
     subprocess.run(['openssl', 'req', '-new', '-key', key_path, '-subj', subj, '-out', csr_path], check=True)
-    # sign with intermediate CA; include v3 extensions if provided by user
     extfile = os.path.join(user_dir, 'v3_ext.cnf')
     if os.path.exists(extfile):
         subprocess.run(['openssl', 'x509', '-req', '-in', csr_path, '-CA', interm_cert, '-CAkey', interm_key, '-CAcreateserial', '-out', crt_path, '-days', '365', '-sha256', '-extfile', extfile, '-extensions', 'v3_req'], check=True)
     else:
         subprocess.run(['openssl', 'x509', '-req', '-in', csr_path, '-CA', interm_cert, '-CAkey', interm_key, '-CAcreateserial', '-out', crt_path, '-days', '365', '-sha256'], check=True)
-    # export p12
     subprocess.run(['openssl', 'pkcs12', '-export', '-inkey', key_path, '-in', crt_path, '-certfile', interm_cert, '-out', p12_path, '-passout', f'pass:{passphrase}'], check=True)
 
-    # encrypt p12 and passphrase using Fernet
     f = get_fernet()
     with open(p12_path, 'rb') as fh:
         enc = f.encrypt(fh.read())
@@ -173,7 +160,6 @@ def issue_cert(request):
     with open(os.path.join(user_dir, 'p12.pass.enc'), 'wb') as fh:
         fh.write(f.encrypt(passphrase.encode('utf-8')))
 
-    # persist metadata to UserCert table for the user
     try:
         p12_enc_rel = os.path.join('users', username, 'user.p12.enc')
         pass_enc_rel = os.path.join('users', username, 'p12.pass.enc')
@@ -185,7 +171,6 @@ def issue_cert(request):
             active=True,
         )
     except Exception:
-        # don't fail issuance because DB insert failed; log would be ideal
         uc = None
 
     resp = {'ok': True, 'p12': p12_path}
@@ -201,7 +186,6 @@ def verify(request):
     uploaded = request.FILES.get('file')
     if not uploaded:
         return JsonResponse({'error': 'no file uploaded'}, status=400)
-    # write to temp file
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
     try:
         for chunk in uploaded.chunks():

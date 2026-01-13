@@ -1,6 +1,4 @@
-"""
-PDF Verifier service for validating PDF signatures
-"""
+
 import os
 from django.conf import settings
 from pyhanko.sign import validation
@@ -10,7 +8,6 @@ from datetime import datetime
 
 
 class PDFVerifier:
-    """Service để xác thực chữ ký PDF"""
     
     def __init__(self):
         self.trust_roots = []
@@ -18,12 +15,9 @@ class PDFVerifier:
         self._load_ca_certificates()
     
     def _load_ca_certificates(self):
-        """Load Root CA và Intermediate CA certificates"""
-        # Load Root CA
         root_dir = os.path.join(settings.BASE_DIR, 'certs', 'root-ca')
         self._load_certs_from_dir(root_dir, self.trust_roots)
         
-        # Load Intermediate CA
         int_dir = os.path.join(
             settings.BASE_DIR, 'certs', 'intermediate-ca', 'certs'
         )
@@ -33,13 +27,6 @@ class PDFVerifier:
               f"{len(self.intermediate_certs)} intermediate CAs")
     
     def _load_certs_from_dir(self, cert_dir, cert_list):
-        """
-        Load certificates từ directory
-        
-        Args:
-            cert_dir: Đường dẫn thư mục chứa certificates
-            cert_list: List để append certificates vào
-        """
         from asn1crypto import x509 as asn1_x509, pem as asn1_pem
         
         if not os.path.isdir(cert_dir):
@@ -65,21 +52,6 @@ class PDFVerifier:
                 print(f"[VERIFY] Failed to load cert {fn}: {e}")
     
     def verify(self, pdf_path):
-        """
-        Xác thực tất cả chữ ký trong PDF
-        
-        Args:
-            pdf_path: Đường dẫn đến file PDF
-            
-        Returns:
-            dict: Kết quả xác thực với format:
-                {
-                    'valid': bool,
-                    'signatures': list,
-                    'signature_count': int,
-                    'error': str or None
-                }
-        """
         signatures = []
         
         try:
@@ -113,15 +85,6 @@ class PDFVerifier:
             }
     
     def _get_signature_fields(self, reader):
-        """
-        Lấy danh sách signature fields từ PDF
-        
-        Args:
-            reader: PdfFileReader object
-            
-        Returns:
-            list: Danh sách signature fields
-        """
         if '/AcroForm' not in reader.root:
             return []
         
@@ -132,18 +95,10 @@ class PDFVerifier:
         return acro_form['/Fields']
     
     def _create_validation_context(self):
-        """
-        Tạo ValidationContext với trust roots
-        
-        Returns:
-            ValidationContext hoặc None
-        """
         if not self.trust_roots:
             return None
         
         try:
-            # Include ALL certificates (root + intermediate) in other_certs
-            # để giúp pyhanko build complete certificate chain
             all_chain_certs = self.intermediate_certs + self.trust_roots
             
             vc = ValidationContext(
@@ -151,7 +106,7 @@ class PDFVerifier:
                 other_certs=all_chain_certs,
                 allow_fetching=False,
                 revocation_mode='soft-fail',
-                weak_hash_algos=set()  # Allow all hash algorithms
+                weak_hash_algos=set()
             )
             
             print(f"[VERIFY] ValidationContext created with "
@@ -164,17 +119,6 @@ class PDFVerifier:
             return None
     
     def _verify_signature(self, reader, sig_field, validation_context):
-        """
-        Xác thực một signature field
-        
-        Args:
-            reader: PdfFileReader object
-            sig_field: Signature field object
-            validation_context: ValidationContext object
-            
-        Returns:
-            dict: Thông tin chữ ký đã xác thực
-        """
         try:
             field_obj = sig_field.get_object()
             fq_name = field_obj.get('/T', 'sig')
@@ -183,14 +127,12 @@ class PDFVerifier:
                 reader, sig_field, fq_name
             )
             
-            # Validate signature với hoặc không có validation context
             try:
                 status = validation.validate_pdf_signature(
                     embedded_sig, 
                     signer_validation_context=validation_context
                 )
             except TypeError:
-                # Fallback nếu API không hỗ trợ validation_context
                 status = validation.validate_pdf_signature(embedded_sig)
             
             return self._extract_signature_info(status)
@@ -214,38 +156,22 @@ class PDFVerifier:
             }
     
     def _extract_signature_info(self, status):
-        """
-        Trích xuất thông tin từ validation status
-        
-        Args:
-            status: Validation status object từ pyhanko
-            
-        Returns:
-            dict: Thông tin chữ ký
-        """
-        # Get certificate
         cert = getattr(status, 'signer_cert', None) or getattr(status, 'signing_cert', None)
         
-        # Extract certificate info
         cert_info = {}
         if cert is not None:
             cert_info = self._extract_certificate_info(cert)
         
-        # Extract signer name from certificate
         signer_name = self._extract_signer_name(cert)
         
-        # Debug log
         if cert:
             print(f"[DEBUG] Certificate subject: {cert.subject if hasattr(cert, 'subject') else 'N/A'}")
             print(f"[DEBUG] Extracted signer name: {signer_name}")
         
-        # Extract timestamp
         timestamp = self._extract_timestamp(status)
         
-        # Determine validity
         is_valid = self._determine_validity(status)
         
-        # Trust status
         trusted = getattr(status, 'trusted', False)
         trust_problem = getattr(status, 'trust_problem_indic', None)
         trust_status = 'TRUSTED' if trusted else (
@@ -255,10 +181,8 @@ class PDFVerifier:
         print(f"[VERIFY] Signature for {signer_name}: valid={is_valid}, "
               f"trust={trust_status}, intact={getattr(status, 'intact', None)}")
         
-        # Extract document integrity status
         doc_intact = getattr(status, 'doc_mdp_ok', None)
         
-        # Debug document status
         print(f"[DEBUG] Document integrity: doc_mdp_ok={doc_intact}, "
               f"modification_level={getattr(status, 'modification_level', None)}, "
               f"coverage={getattr(getattr(status, 'coverage', None), 'name', None)}")
@@ -270,13 +194,12 @@ class PDFVerifier:
             'trust_status': trust_status,
             'certificate_info': cert_info,
             'signature_intact': getattr(status, 'intact', None),
-            'document_intact': doc_intact if doc_intact is not None else True,  # Default True nếu None
+            'document_intact': doc_intact if doc_intact is not None else True,
             'coverage': getattr(getattr(status, 'coverage', None), 'name', None),
             'validation_time': datetime.now().isoformat()
         }
     
     def _extract_certificate_info(self, cert):
-        """Extract thông tin từ certificate object"""
         def _safe_subject(c):
             try:
                 if hasattr(c.subject, 'rfc4514_string'):
@@ -301,7 +224,6 @@ class PDFVerifier:
             try:
                 if hasattr(c, 'not_valid_before') and hasattr(c, 'not_valid_after'):
                     return c.not_valid_before.isoformat(), c.not_valid_after.isoformat()
-                # asn1crypto path
                 try:
                     nbf = c['tbs_certificate']['validity']['not_before'].native
                     naf = c['tbs_certificate']['validity']['not_after'].native
@@ -336,7 +258,6 @@ class PDFVerifier:
         }
     
     def _extract_signer_name(self, cert):
-        """Extract tên người ký từ certificate và UserProfile"""
         if cert is None:
             return 'Unknown'
         
@@ -344,19 +265,15 @@ class PDFVerifier:
             subject = cert.subject
             common_name = None
             
-            # asn1crypto.x509.Name có method .native để lấy dict
             if hasattr(subject, 'native'):
                 subject_dict = subject.native
-                # Thử các trường theo thứ tự ưu tiên
                 for key in ['common_name', 'organizational_unit_name', 'organization_name', 'email_address']:
                     if key in subject_dict and subject_dict[key]:
                         common_name = subject_dict[key]
                         break
             
-            # Fallback: dùng human_friendly nếu có
             if not common_name and hasattr(subject, 'human_friendly'):
                 human = subject.human_friendly
-                # Format: "CN=viet, emailAddress=viet@dut.local"
                 if 'CN=' in human:
                     parts = human.split(',')
                     for part in parts:
@@ -364,34 +281,28 @@ class PDFVerifier:
                             common_name = part.split('CN=')[1].strip()
                             break
             
-            # Thử method chosen
             if not common_name and hasattr(subject, 'chosen'):
                 for rdn in subject.chosen:
                     for attr in rdn:
-                        # attr có oid và value
                         if hasattr(attr, 'value'):
                             attr_val = attr.value
                             if hasattr(attr_val, 'native'):
                                 common_name = attr_val.native
                                 break
             
-            # Lookup UserProfile từ database để lấy thông tin chi tiết
             if common_name:
                 try:
                     from usermanage.models import UserProfile
                     from django.contrib.auth.models import User
                     
-                    # Tìm user theo username (CN thường là username)
                     user = User.objects.filter(username=common_name).first()
                     if user:
                         profile = UserProfile.objects.filter(user=user).first()
                         if profile:
-                            # Trả về thông tin từ UserProfile
                             full_name = getattr(profile, 'full_name', '')
                             department = getattr(profile, 'department', '')
                             role = getattr(profile, 'role', '')
                             
-                            # Format: "Full Name - Role - Department"
                             parts = []
                             if full_name:
                                 parts.append(full_name)
@@ -413,7 +324,6 @@ class PDFVerifier:
         return 'Unknown'
     
     def _extract_timestamp(self, status):
-        """Extract timestamp từ status"""
         try:
             if (getattr(status, 'timestamp_validity', None) and 
                 getattr(status.timestamp_validity, 'timestamp', None)):
@@ -424,33 +334,22 @@ class PDFVerifier:
         return None
     
     def _determine_validity(self, status):
-        """
-        Xác định xem chữ ký có hợp lệ không
-        
-        Priority: bottom_line > (trusted AND intact) > (valid AND intact)
-        """
         bottom_line = getattr(status, 'bottom_line', None)
         intact = getattr(status, 'intact', False)
         trusted = getattr(status, 'trusted', False)
         valid = getattr(status, 'valid', False)
         trust_problem = getattr(status, 'trust_problem_indic', None)
         
-        # If bottom_line exists and is True, that's definitive
         if bottom_line is True:
             return True
         
-        # If signature is intact and trusted, consider it valid
         if intact and trusted:
             return True
         
-        # If signature is valid and intact but trust issue is only about chain,
-        # still consider valid (handles cases where chain building fails 
-        # but signature is cryptographically valid)
         if valid and intact and trust_problem and 'CHAIN' in str(trust_problem):
             print(f"[VERIFY] Accepting signature despite chain issue: {trust_problem}")
             return True
         
-        # Fallback to valid + intact
         if valid and intact:
             return True
         

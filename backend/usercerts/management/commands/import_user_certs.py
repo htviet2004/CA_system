@@ -38,7 +38,6 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(f'No User record for directory: {name}'))
                 continue
 
-            # compute relative paths to store in DB
             try:
                 rel_p12 = os.path.relpath(p12_enc, base)
             except Exception:

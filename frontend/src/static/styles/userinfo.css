@@ -65,7 +65,7 @@
   transition: all 0.2s ease;
 }
 
-/* Back button */
+
 .userinfo-actions button[type="button"] {
   background: transparent;
   color: var(--text-secondary, #9ca3af);
@@ -77,7 +77,7 @@
   color: #e5e7eb;
 }
 
-/* Save button */
+
 .userinfo-actions button.primary {
   background: #2563eb;
   color: #ffffff;

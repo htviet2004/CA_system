@@ -9,6 +9,6 @@ urlpatterns = [
     path('register/', auth.register, name='register'),
     path('login/', auth.login_view, name='login'),
     path('issue_cert/', auth.issue_cert, name='issue_cert'),
-    path('verify/', views.verify_pdf, name='verify_pdf'),  # NEW
+    path('verify/', views.verify_pdf, name='verify_pdf'),
     path('pdf-info/', views.get_pdf_info, name='pdf_info'), 
 ]

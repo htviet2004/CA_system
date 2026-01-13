@@ -1,4 +1,4 @@
-/* Modal Overlay */
+
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -41,7 +41,7 @@
   }
 }
 
-/* Auth Modal Card */
+
 .auth-modal-card {
   background: var(--white);
   border-radius: 16px;

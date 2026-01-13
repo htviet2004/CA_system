@@ -1,6 +1,4 @@
-"""
-Certificate service for managing user certificates
-"""
+
 import os
 import sys
 import subprocess
@@ -13,24 +11,12 @@ from .utils import get_fernet
 
 
 class CertificateService:
-    """Service để quản lý chứng chỉ người dùng"""
     
     @staticmethod
     def find_user_certificate(user, username):
-        """
-        Tìm chứng chỉ của user từ DB hoặc filesystem
-        
-        Args:
-            user: Django User object
-            username: Tên đăng nhập
-            
-        Returns:
-            tuple: (enc_p12_path, enc_pass_path) hoặc (None, None) nếu không tìm thấy
-        """
         enc_p12 = None
         enc_pass = None
         
-        # Ưu tiên UserCert từ DB
         uc = UserCert.objects.filter(
             user=user, 
             active=True
@@ -49,7 +35,6 @@ class CertificateService:
                 enc_p12 = p
                 enc_pass = pp
         
-        # Fallback: tìm trong thư mục users
         if not enc_p12 or not enc_pass:
             user_dir = os.path.join(settings.BASE_DIR, 'users', username)
             fs_p12 = os.path.join(user_dir, 'user.p12.enc')
@@ -63,16 +48,6 @@ class CertificateService:
     
     @staticmethod
     def decrypt_certificate(enc_p12_path, enc_pass_path):
-        """
-        Giải mã chứng chỉ P12 và password
-        
-        Args:
-            enc_p12_path: Đường dẫn đến file P12 đã mã hóa
-            enc_pass_path: Đường dẫn đến file password đã mã hóa
-            
-        Returns:
-            tuple: (p12_data, passphrase_string)
-        """
         fernet = get_fernet()
         
         with open(enc_p12_path, 'rb') as fh:
@@ -85,20 +60,9 @@ class CertificateService:
     
     @staticmethod
     def auto_issue_certificate(username, password=None):
-        """
-        Tự động issue chứng chỉ cho user (fallback)
-        
-        Args:
-            username: Tên đăng nhập
-            password: Password (dùng làm passphrase cho P12)
-            
-        Returns:
-            tuple: (enc_p12_path, enc_pass_path) hoặc raise Exception
-        """
         script = os.path.join(settings.BASE_DIR, 'scripts', 'issue_cert.py')
         user_dir = os.path.join(settings.BASE_DIR, 'users', username)
         
-        # Prefer explicit p12.pass if provided in plain file
         plain_pass_file = os.path.join(user_dir, 'p12.pass')
         if os.path.exists(plain_pass_file):
             passphrase = open(plain_pass_file, 'r', encoding='utf-8').read().strip()
@@ -111,10 +75,8 @@ class CertificateService:
             text=True
         )
         
-        # Give filesystem a moment
         time.sleep(0.2)
         
-        # Try to parse JSON output if present
         out = proc.stdout or ''
         jidx = out.rfind('{')
         parsed = None
@@ -140,16 +102,7 @@ class CertificateService:
     
     @staticmethod
     def create_temp_files(p12_data, passphrase):
-        """
-        Tạo temp files cho P12 và passphrase
         
-        Args:
-            p12_data: Dữ liệu P12 (bytes)
-            passphrase: Passphrase (string)
-            
-        Returns:
-            tuple: (p12_tmp_path, pass_tmp_path)
-        """
         p12_tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.p12')
         p12_tmp.write(p12_data)
         p12_tmp.flush()
@@ -164,12 +117,7 @@ class CertificateService:
     
     @staticmethod
     def cleanup_temp_files(*paths):
-        """
-        Cleanup temp files
         
-        Args:
-            *paths: Variable number of file paths to delete
-        """
         for path in paths:
             try:
                 if path and os.path.exists(path):

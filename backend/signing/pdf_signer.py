@@ -1,6 +1,4 @@
-"""
-PDF Signer service for signing PDF documents
-"""
+
 import os
 import tempfile
 import time
@@ -12,17 +10,9 @@ from django.conf import settings
 
 
 class PDFSigner:
-    """Service để ký PDF documents"""
     
     def __init__(self, p12_data, passphrase, username):
-        """
-        Initialize PDF Signer
-        
-        Args:
-            p12_data: PKCS#12 certificate data (bytes)
-            passphrase: Password for P12 (string)
-            username: Username for signature field naming
-        """
+
         self.p12_data = p12_data
         self.passphrase = passphrase
         self.username = username
@@ -30,7 +20,6 @@ class PDFSigner:
         self.pass_tmp = None
     
     def __enter__(self):
-        """Context manager để tự động cleanup temp files"""
         self.p12_tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.p12')
         self.p12_tmp.write(self.p12_data)
         self.p12_tmp.flush()
@@ -46,7 +35,6 @@ class PDFSigner:
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Cleanup temp files"""
         try:
             if self.p12_tmp:
                 os.unlink(self.p12_tmp.name)
@@ -56,18 +44,7 @@ class PDFSigner:
             pass
     
     def parse_position(self, position_str):
-        """
-        Parse chuỗi position thành SigFieldSpec
         
-        Args:
-            position_str: Format "page/x1,y1,x2,y2" (e.g., "0/10,10,100,50")
-            
-        Returns:
-            SigFieldSpec: pyHanko signature field specification
-            
-        Raises:
-            ValueError: Nếu position_str không hợp lệ
-        """
         if not position_str:
             raise ValueError('Vui lòng chọn vị trí chữ ký trên PDF')
         
@@ -82,11 +59,9 @@ class PDFSigner:
             if len(coords) != 4:
                 raise ValueError('Tọa độ phải có 4 giá trị: x1,y1,x2,y2')
             
-            # Normalize coordinates (ensure x1 < x2 and y1 < y2)
             x1, x2 = sorted([coords[0], coords[2]])
             y1, y2 = sorted([coords[1], coords[3]])
             
-            # Generate unique field name with timestamp
             timestamp = str(int(time.time()))
             field_name = f"Signature_{self.username}_{timestamp}"
             
@@ -100,43 +75,24 @@ class PDFSigner:
     
     def sign_pdf(self, input_path, output_path, field_spec, 
                  reason='Signed', location='', use_timestamp=True, invisible=False):
-        """
-        Ký PDF file
         
-        Args:
-            input_path: Đường dẫn file PDF đầu vào
-            output_path: Đường dẫn file PDF đầu ra
-            field_spec: SigFieldSpec object
-            reason: Lý do ký
-            location: Vị trí ký
-            use_timestamp: Có sử dụng timestamp từ TSA không
-            invisible: Nếu True, không vẽ appearance (invisible signature)
-            
-        Raises:
-            Exception: Nếu việc ký thất bại
-        """
-        # Load trust roots (CA certificates) để embed vào signature
         trust_roots = self._load_trust_roots()
         
-        # Load signer từ P12 với certificate chain
         try:
             signer_obj = signers.SimpleSigner.load_pkcs12(
                 self.p12_tmp.name, 
                 passphrase=self.passphrase.encode('utf-8'),
-                ca_chain_files=None,  # Sẽ dùng cert_registry
-                other_certs=trust_roots  # Embed CA chain vào signature
+                ca_chain_files=None,
+                other_certs=trust_roots
             )
         except (AttributeError, TypeError):
-            # Older pyhanko API fallback - không có other_certs param
             signer_obj = signers.SimpleSigner.load_pkcs12(
                 self.p12_tmp.name, 
                 passphrase=self.passphrase.encode('utf-8')
             )
-            # Manually add CA chain
             if hasattr(signer_obj, 'cert_registry') and trust_roots:
                 signer_obj.cert_registry.extend(trust_roots)
         
-        # Tạo signature metadata với PAdES compliance
         signature_meta = signers.PdfSignatureMetadata(
             field_name=field_spec.sig_field_name,
             name=self.username,
@@ -145,17 +101,15 @@ class PDFSigner:
             subfilter=ph_fields.SigSeedSubFilter.PADES,
         )
         
-        # Attach a Time Stamp Authority (TSA) for trusted timestamps
         timestamper = None
         if use_timestamp:
             timestamper = self._get_timestamper()
         
-        # Load trust roots for validation info embedding
         trust_roots = self._load_trust_roots()
         validation_context = None
         if trust_roots:
             from pyhanko_certvalidator import ValidationContext
-            all_chain_certs = trust_roots  # Include all CAs
+            all_chain_certs = trust_roots
             validation_context = ValidationContext(
                 trust_roots=trust_roots,
                 other_certs=all_chain_certs,
@@ -164,7 +118,6 @@ class PDFSigner:
                 weak_hash_algos=set()
             )
         
-        # Read PDF and sign it
         with open(input_path, 'rb') as inf:
             pdf_writer = IncrementalPdfFileWriter(inf)
             
@@ -173,8 +126,6 @@ class PDFSigner:
             
             with open(output_path, 'wb') as outf:
                 if invisible:
-                    # For invisible signatures, don't create any field
-                    # pyHanko will add the signature without visual representation
                     print("[SIGN] Adding invisible signature (no field)")
                     signers.sign_pdf(
                         pdf_writer,
@@ -185,7 +136,6 @@ class PDFSigner:
                         output=outf
                     )
                 else:
-                    # Normal visible signature with field
                     signers.sign_pdf(
                         pdf_writer,
                         signature_meta=signature_meta,
@@ -195,17 +145,11 @@ class PDFSigner:
                         output=outf
                     )
         
-        # Validate output file is non-empty
         if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
             raise ValueError('Signed PDF is empty or not created')
     
     def _get_timestamper(self):
-        """
-        Lấy timestamper từ TSA servers
         
-        Returns:
-            HTTPTimeStamper hoặc None
-        """
         tsa_urls = [
             getattr(settings, 'TSA_URL', None),
             'http://timestamp.digicert.com',
@@ -217,7 +161,6 @@ class PDFSigner:
             if tsa_url:
                 try:
                     timestamper = ph_timestamps.HTTPTimeStamper(tsa_url)
-                    # Test the connection (không thực sự gọi, chỉ khởi tạo)
                     return timestamper
                 except Exception:
                     continue
@@ -225,12 +168,6 @@ class PDFSigner:
         return None
     
     def _load_trust_roots(self):
-        """
-        Load root CA và intermediate CA certificates
-        
-        Returns:
-            list: Danh sách certificate objects
-        """
         trust_roots = []
         
         try:

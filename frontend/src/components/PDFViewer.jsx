@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 export default function PDFViewer({ pdfUrl, onSelectArea, showSelection = true, selectedArea = null }) {
@@ -57,12 +56,12 @@ export default function PDFViewer({ pdfUrl, onSelectArea, showSelection = true, 
     const canvas = canvasRef.current;
     if (!canvas || !pdfDoc) return;
 
-    // Cancel previous render task if still running
+
     if (renderTaskRef.current) {
       try {
         await renderTaskRef.current.cancel();
       } catch (e) {
-        // Ignore cancellation errors
+
       }
       renderTaskRef.current = null;
     }
@@ -77,7 +76,7 @@ export default function PDFViewer({ pdfUrl, onSelectArea, showSelection = true, 
     canvas.height = viewport.height;
     canvas.width = viewport.width;
     
-    // Sync overlay canvas size
+
     if (overlayRef.current) {
       overlayRef.current.height = viewport.height;
       overlayRef.current.width = viewport.width;
@@ -106,35 +105,35 @@ export default function PDFViewer({ pdfUrl, onSelectArea, showSelection = true, 
     const overlay = overlayRef.current;
     const ctx = overlay.getContext('2d');
     
-    // Clear previous selection
+
     ctx.clearRect(0, 0, overlay.width, overlay.height);
     
     const { x1, y1, x2, y2 } = selection;
     const width = x2 - x1;
     const height = y2 - y1;
     
-    // Semi-transparent fill
+
     ctx.fillStyle = 'rgba(37, 99, 235, 0.08)';
     ctx.fillRect(x1, y1, width, height);
     
-    // Dashed border (professional style like Adobe Acrobat)
+
     ctx.strokeStyle = '#2563eb';
     ctx.lineWidth = 2;
     ctx.setLineDash([8, 4]);
     ctx.strokeRect(x1, y1, width, height);
-    ctx.setLineDash([]); // Reset
+    ctx.setLineDash([]);
     
-    // Resize handles at 4 corners
+
     const handleSize = 8;
     ctx.fillStyle = '#2563eb';
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     
     const corners = [
-      [x1, y1],           // Top-left
-      [x2, y1],           // Top-right
-      [x1, y2],           // Bottom-left
-      [x2, y2]            // Bottom-right
+      [x1, y1],
+      [x2, y1],
+      [x1, y2],
+      [x2, y2]
     ];
     
     corners.forEach(([cx, cy]) => {
@@ -142,7 +141,7 @@ export default function PDFViewer({ pdfUrl, onSelectArea, showSelection = true, 
       ctx.strokeRect(cx - handleSize/2, cy - handleSize/2, handleSize, handleSize);
     });
     
-    // Dimension label
+
     const widthMm = Math.abs(width / scale * 25.4 / 96).toFixed(1);
     const heightMm = Math.abs(height / scale * 25.4 / 96).toFixed(1);
     const label = `${widthMm} × ${heightMm} mm`;
@@ -152,7 +151,7 @@ export default function PDFViewer({ pdfUrl, onSelectArea, showSelection = true, 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     
-    // Background for label
+
     const textMetrics = ctx.measureText(label);
     const labelX = (x1 + x2) / 2;
     const labelY = y1 - 8;
@@ -174,13 +173,13 @@ export default function PDFViewer({ pdfUrl, onSelectArea, showSelection = true, 
       20
     );
     
-    // Label text
+
     ctx.fillStyle = '#1e40af';
     ctx.fillText(label, labelX, labelY);
   };
 
   const drawSelection = () => {
-    // Legacy method - now using overlay
+
     drawSelectionOverlay();
   };
 
@@ -188,7 +187,7 @@ export default function PDFViewer({ pdfUrl, onSelectArea, showSelection = true, 
     const canvas = overlayRef.current || canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     
-    // Calculate scale factors between actual canvas size and displayed size
+
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     
@@ -227,19 +226,19 @@ export default function PDFViewer({ pdfUrl, onSelectArea, showSelection = true, 
     setIsSelecting(false);
     
     if (selection && pageRef.current && viewportRef.current) {
-      // Get page dimensions in PDF points (unscaled)
+
       const page = pageRef.current;
-      const pageHeight = page.view[3]; // PDF page height in points
+      const pageHeight = page.view[3];
       
-      // Convert canvas coordinates to PDF coordinates
-      // Canvas: top-left origin, Y increases downward
-      // PDF: bottom-left origin, Y increases upward
+
+
+
       const pdfCoords = {
-        page: currentPage - 1, // 0-indexed
+        page: currentPage - 1,
         x1: selection.x1 / scale,
-        y1: pageHeight - (selection.y2 / scale), // Flip Y and convert
+        y1: pageHeight - (selection.y2 / scale),
         x2: selection.x2 / scale,
-        y2: pageHeight - (selection.y1 / scale)  // Flip Y and convert
+        y2: pageHeight - (selection.y1 / scale)
       };
       
       console.log('Canvas selection:', selection);
