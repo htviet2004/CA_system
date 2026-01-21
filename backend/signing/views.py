@@ -6,6 +6,7 @@ from django.contrib.auth import authenticate
 import tempfile
 import os
 import traceback
+import hashlib
 
 from .certificate_service import CertificateService
 from .pdf_signer import PDFSigner
@@ -14,10 +15,52 @@ from .pdf_stamp import PDFStampService
 from .utils import find_pyhanko_executable
 from datetime import datetime
 from usermanage.models import UserProfile
+from usercerts.models import UserCert, SigningHistory
 
 
 def _find_pyhanko(preferred=None):
     return find_pyhanko_executable(preferred)
+
+
+def _get_client_ip(request):
+    """Extract client IP from request."""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR')
+
+
+def _record_signing_history(user, uploaded_file, signed_content, reason, location, request, certificate=None):
+    """
+    Record signing action in SigningHistory.
+    Called after successful PDF signing.
+    """
+    try:
+        # Compute hash of signed document
+        doc_hash = hashlib.sha256(signed_content).hexdigest()
+        
+        # Get certificate if not provided
+        if not certificate:
+            certificate = UserCert.objects.filter(
+                user=user, 
+                active=True
+            ).order_by('-created_at').first()
+        
+        SigningHistory.objects.create(
+            user=user,
+            certificate=certificate,
+            document_name=uploaded_file.name or 'unknown.pdf',
+            document_hash=doc_hash,
+            document_size=len(signed_content),
+            reason=reason,
+            location=location,
+            status='valid',
+            ip_address=_get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:512],
+        )
+        print(f"[HISTORY] Recorded signing: {uploaded_file.name} by {user.username}")
+    except Exception as e:
+        print(f"[HISTORY] Failed to record signing history: {e}")
 
 
 @csrf_exempt
@@ -147,6 +190,26 @@ def sign_file(request):
                 raise ValueError('Signed PDF is empty')
             
             print(f"[SIGN] Output file validated: {os.path.getsize(out_path)} bytes")
+            
+            # Record signing history
+            with open(out_path, 'rb') as signed_file:
+                signed_content = signed_file.read()
+            
+            # Get user's active certificate for history
+            user_cert = UserCert.objects.filter(
+                user=user, 
+                active=True
+            ).order_by('-created_at').first()
+            
+            _record_signing_history(
+                user=user,
+                uploaded_file=uploaded,
+                signed_content=signed_content,
+                reason=reason,
+                location=location,
+                request=request,
+                certificate=user_cert
+            )
             
             resp = FileResponse(
                 open(out_path, 'rb'),

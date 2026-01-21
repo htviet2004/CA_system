@@ -6,7 +6,7 @@ import json
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from usercerts.models import UserCert
 from signing.utils import get_fernet, derive_encryption_key
@@ -76,6 +76,10 @@ def register(request):
 
 @csrf_exempt
 def login_view(request):
+    """
+    Authenticate user and create Django session.
+    Session cookie is HttpOnly and persists across page reloads.
+    """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST only'}, status=405)
     username = request.POST.get('username')
@@ -84,7 +88,12 @@ def login_view(request):
     if not user:
         return JsonResponse({'error': 'invalid credentials'}, status=401)
     login(request, user)
-    return JsonResponse({'ok': True, 'username': username})
+    return JsonResponse({
+        'ok': True, 
+        'username': username,
+        'is_staff': user.is_staff,
+        'is_active': user.is_active
+    })
 
 
 @csrf_exempt
@@ -198,6 +207,36 @@ def verify(request):
     pyhanko = getattr(settings, 'PYHANKO_CLI', 'pyhanko')
     rootca = os.path.join(settings.BASE_DIR, 'certs', 'rootCA.crt')
     cmd = [pyhanko, 'sign', 'validate', tmp_path, '--trust', rootca]
+
+
+@csrf_exempt
+def get_current_user(request):
+    """
+    Return currently authenticated user info from Django session.
+    Used to restore user state after page reload.
+    """
+    if not request.user.is_authenticated:
+        return JsonResponse({'authenticated': False}, status=200)
+    
+    return JsonResponse({
+        'authenticated': True,
+        'username': request.user.username,
+        'is_staff': request.user.is_staff,
+        'is_active': request.user.is_active,
+        'email': request.user.email or ''
+    })
+
+
+@csrf_exempt
+def logout_view(request):
+    """
+    Logout user and destroy Django session.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST only'}, status=405)
+    
+    logout(request)
+    return JsonResponse({'ok': True, 'message': 'Logged out successfully'})
     proc = subprocess.run(cmd, capture_output=True, text=True)
     try:
         os.unlink(tmp_path)

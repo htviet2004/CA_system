@@ -3,6 +3,31 @@ export function getCsrf(){
   return v ? v.pop() : ''
 }
 
+/**
+ * AUTHENTICATION API
+ * Uses Django session cookies (HttpOnly) for security.
+ * Session persists across page reloads.
+ */
+
+export async function getCurrentUser(){
+  const res = await fetch('/api/usermanage/me/', {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if(!res.ok) throw new Error('Failed to get current user')
+  return res.json()
+}
+
+export async function logout(){
+  const res = await fetch('/api/usermanage/logout/', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {'X-CSRFToken': getCsrf()}
+  })
+  if(!res.ok) throw new Error('Logout failed')
+  return res.json()
+}
+
 export async function register(username, password){
   const fd = new FormData(); fd.append('username', username); fd.append('password', password)
   const res = await fetch('/api/sign/register/', {method:'POST', body:fd, credentials:'include', headers:{'X-CSRFToken': getCsrf()}})
@@ -17,9 +42,16 @@ export async function login(username, password){
   return res.json()
 }
 
+/**
+ * PDF SIGNING API
+ * Note: After session is established, credentials are optional
+ * as backend can use request.user from session
+ */
 export async function signPdf(file, creds, options = {}){
   const fd = new FormData(); 
   fd.append('file', file)
+  // Send credentials for now (backward compatibility)
+  // TODO: Backend should use request.user when session exists
   if(creds && creds.username){ 
     fd.append('username', creds.username); 
     fd.append('password', creds.password) 

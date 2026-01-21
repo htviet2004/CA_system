@@ -64,6 +64,7 @@ export default function SignPDF({ onSign, username }) {
         preventDefault: () => {},
         target: {
           file: { files: [selectedFile] },
+          password: { value: signOptions.password || '' }, // Added password field
           reason: { value: signOptions.reason },
           location: { value: signOptions.location },
           position: { value: positionValue },
@@ -190,6 +191,19 @@ export default function SignPDF({ onSign, username }) {
 
               {showAdvanced && (
                 <div className="advanced-options">
+                  <div className="form-group">
+                    <label htmlFor="password">Mật khẩu *</label>
+                    <input
+                      type="password"
+                      id="password"
+                      value={signOptions.password || ''}
+                      onChange={(e) => setSignOptions({...signOptions, password: e.target.value})}
+                      placeholder="Nhập mật khẩu để ký"
+                      required
+                    />
+                    <small className="field-hint">Mật khẩu tài khoản của bạn</small>
+                  </div>
+                  
                   <div className="stamp-text-section">
                     <h4>📝 Tùy chỉnh nội dung hiển thị trong stamp</h4>
                     <p className="section-hint">Các trường dưới đây sẽ hiển thị trong chữ ký điện tử trên PDF</p>

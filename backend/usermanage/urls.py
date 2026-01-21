@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from .profile import update_profile, get_profile
+from .auth import get_current_user, logout_view
 
 urlpatterns = [
     path('list/', views.list_users, name='list_users'),
@@ -10,4 +11,7 @@ urlpatterns = [
     path('reset_password/<str:username>/', views.reset_password, name='reset_password'),
     path('profile/update/', update_profile, name='update_profile'),
     path('profile/<str:username>/', get_profile, name='get_profile'),
+    # Session management endpoints
+    path('me/', get_current_user, name='current_user'),
+    path('logout/', logout_view, name='logout'),
 ]

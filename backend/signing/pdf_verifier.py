@@ -178,6 +178,12 @@ class PDFVerifier:
             getattr(trust_problem, 'name', 'UNTRUSTED') if trust_problem else 'UNTRUSTED'
         )
         
+        # Check certificate revocation status in our database
+        revocation_status = self._check_revocation_status(cert_info)
+        if revocation_status.get('is_revoked'):
+            is_valid = False
+            trust_status = 'REVOKED'
+        
         print(f"[VERIFY] Signature for {signer_name}: valid={is_valid}, "
               f"trust={trust_status}, intact={getattr(status, 'intact', None)}")
         
@@ -196,8 +202,56 @@ class PDFVerifier:
             'signature_intact': getattr(status, 'intact', None),
             'document_intact': doc_intact if doc_intact is not None else True,
             'coverage': getattr(getattr(status, 'coverage', None), 'name', None),
-            'validation_time': datetime.now().isoformat()
+            'validation_time': datetime.now().isoformat(),
+            'revocation_info': revocation_status
         }
+    
+    def _check_revocation_status(self, cert_info):
+        """
+        Check if certificate is revoked in our database.
+        Integrates with SigningHistory and UserCert models.
+        """
+        try:
+            from usercerts.models import UserCert, SigningHistory
+            
+            serial = cert_info.get('serial_number')
+            cn = cert_info.get('common_name')
+            
+            # Check by serial number first
+            if serial:
+                revoked_cert = UserCert.objects.filter(
+                    serial_number=serial,
+                    active=False
+                ).first()
+                
+                if revoked_cert:
+                    return {
+                        'is_revoked': True,
+                        'revoked_at': revoked_cert.revoked_at.isoformat() if revoked_cert.revoked_at else None,
+                        'reason': revoked_cert.revocation_reason,
+                        'source': 'certificate'
+                    }
+            
+            # Check by common name
+            if cn:
+                revoked_cert = UserCert.objects.filter(
+                    common_name=cn,
+                    active=False
+                ).first()
+                
+                if revoked_cert:
+                    return {
+                        'is_revoked': True,
+                        'revoked_at': revoked_cert.revoked_at.isoformat() if revoked_cert.revoked_at else None,
+                        'reason': revoked_cert.revocation_reason,
+                        'source': 'certificate'
+                    }
+            
+            return {'is_revoked': False}
+            
+        except Exception as e:
+            print(f"[REVOCATION] Error checking revocation: {e}")
+            return {'is_revoked': False, 'error': str(e)}
     
     def _extract_certificate_info(self, cert):
         def _safe_subject(c):
