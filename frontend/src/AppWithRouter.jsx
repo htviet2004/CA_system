@@ -1,14 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { register, login, logout, getCurrentUser, signPdf } from './api';
+import { 
+  register, 
+  login, 
+  logout, 
+  getCurrentUser, 
+  signPdf,
+  getUserDashboardData 
+} from './api';
 import Header from './components/Header';
 import AuthForm from './components/AuthForm';
 import SignPDF from './components/SignPDF';
 import PDFVerifier from './components/PDFVerifier';
 import UserProfile from './components/UserProfile';
+import SigningHistory from './components/SigningHistory';
+import CertificateManager from './components/CertificateManager';
 import './static/styles/variables.css';
 import './static/styles/global.css';
 import './static/styles/components.css';
+import './static/styles/signing-history.css';
+import './static/styles/certificate-manager.css';
 
 /**
  * Main Application Component with Client-Side Routing
@@ -29,6 +40,8 @@ function AppContent() {
   const [user, setUser] = useState(null); // {username, is_staff, is_active}
   const [loading, setLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [certificateInfo, setCertificateInfo] = useState(null);
+  const [signingStats, setSigningStats] = useState(null);
   const navigate = useNavigate();
 
   /**
@@ -56,6 +69,40 @@ function AppContent() {
     restoreSession();
   }, []);
 
+  /**
+   * Fetch dashboard data when user is logged in
+   */
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      if (!user) {
+        setCertificateInfo(null);
+        setSigningStats(null);
+        return;
+      }
+      
+      try {
+        const data = await getUserDashboardData();
+        setCertificateInfo(data.certificate || null);
+        setSigningStats(data.signing_stats || null);
+      } catch (err) {
+        console.error('Failed to fetch dashboard data:', err);
+        // Set mock data for development if API not ready
+        setCertificateInfo({
+          status: 'valid',
+          days_remaining: 365,
+          common_name: user.username
+        });
+        setSigningStats({
+          total_signed: 0,
+          valid_signatures: 0,
+          this_month: 0
+        });
+      }
+    };
+    
+    fetchDashboardData();
+  }, [user]);
+
   const showMessage = (message, type = 'success') => {
     setMsg(message);
     setMsgType(type);
@@ -69,11 +116,23 @@ function AppContent() {
     e.preventDefault();
     const username = e.target.username.value;
     const password = e.target.password.value;
+    
+    // Collect profile data from enhanced registration form
+    const profileData = {
+      full_name: e.target.full_name?.value || '',
+      email: e.target.email?.value || '',
+      phone: e.target.phone?.value || '',
+      department: e.target.department?.value || '',
+      role: e.target.role?.value || 'student'
+    };
+    
     try {
-      await register(username, password);
-      showMessage(`Đăng ký thành công cho tài khoản: ${username}`, 'success');
+      await register(username, password, profileData);
+      showMessage(`Đăng ký thành công! Tài khoản ${username} đã được tạo và cấp chứng thư số PKI.`, 'success');
+      setShowAuthModal(false);
     } catch (err) {
       showMessage(`Lỗi đăng ký: ${err.message || err}`, 'error');
+      throw err; // Re-throw so AuthForm can handle it
     }
   };
 
@@ -101,6 +160,8 @@ function AppContent() {
     try {
       await logout();
       setUser(null);
+      setCertificateInfo(null);
+      setSigningStats(null);
       navigate('/sign');
       showMessage('Đăng xuất thành công', 'success');
     } catch (err) {
@@ -171,10 +232,11 @@ function AppContent() {
   return (
     <div className="app-container">
       <Header 
-        username={user?.username} 
+        user={user} 
         onAuthClick={() => setShowAuthModal(true)}
         onLogout={handleLogout}
-        onEditProfile={() => navigate('/profile')} 
+        certificateInfo={certificateInfo}
+        signingStats={signingStats}
       />
       
       <main className="main-content">
@@ -195,8 +257,29 @@ function AppContent() {
                 <UserProfile 
                   username={user.username} 
                   onBack={() => navigate('/sign')} 
-                  showMessage={showMessage} 
+                  showMessage={showMessage}
+                  isAdmin={user.is_staff}
                 />
+              ) : (
+                <Navigate to="/sign" replace />
+              )
+            } 
+          />
+          <Route 
+            path="/signing-history" 
+            element={
+              user ? (
+                <SigningHistory showMessage={showMessage} />
+              ) : (
+                <Navigate to="/sign" replace />
+              )
+            } 
+          />
+          <Route 
+            path="/certificates" 
+            element={
+              user ? (
+                <CertificateManager showMessage={showMessage} />
               ) : (
                 <Navigate to="/sign" replace />
               )

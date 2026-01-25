@@ -8,8 +8,7 @@ export default function SignPDF({ onSign, username }) {
   const [isDragging, setIsDragging] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [signOptions, setSignOptions] = useState({
-    reason: 'Ký số tài liệu',
-    location: 'Việt Nam'
+    reason: 'Ký số tài liệu'
   });
   const [previewUrl, setPreviewUrl] = useState(null);
   const [signedPdfUrl, setSignedPdfUrl] = useState(null);
@@ -66,7 +65,6 @@ export default function SignPDF({ onSign, username }) {
           file: { files: [selectedFile] },
           password: { value: signOptions.password || '' }, // Added password field
           reason: { value: signOptions.reason },
-          location: { value: signOptions.location },
           position: { value: positionValue },
           signer_name: { value: signOptions.signerName || '' },
           title: { value: signOptions.title || '' },
@@ -253,17 +251,6 @@ export default function SignPDF({ onSign, username }) {
                       value={signOptions.reason}
                       onChange={(e) => setSignOptions({...signOptions, reason: e.target.value})}
                       placeholder="Nhập lý do ký số"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="location">Vị trí</label>
-                    <input
-                      type="text"
-                      id="location"
-                      value={signOptions.location}
-                      onChange={(e) => setSignOptions({...signOptions, location: e.target.value})}
-                      placeholder="Nhập vị trí ký"
                     />
                   </div>
                 </div>

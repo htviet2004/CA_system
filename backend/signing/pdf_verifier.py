@@ -1,10 +1,17 @@
+"""
+PDF Signature Verification service using pyHanko.
 
+Verifies PAdES signatures against the internal CA trust chain.
+"""
 import os
+import logging
 from django.conf import settings
 from pyhanko.sign import validation
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko_certvalidator import ValidationContext
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 class PDFVerifier:
@@ -23,7 +30,7 @@ class PDFVerifier:
         )
         self._load_certs_from_dir(int_dir, self.intermediate_certs)
         
-        print(f"[VERIFY] Loaded {len(self.trust_roots)} root CAs and "
+        logger.info(f"Loaded {len(self.trust_roots)} root CAs and "
               f"{len(self.intermediate_certs)} intermediate CAs")
     
     def _load_certs_from_dir(self, cert_dir, cert_list):
@@ -47,9 +54,9 @@ class PDFVerifier:
                     cert = asn1_x509.Certificate.load(der)
                 
                 cert_list.append(cert)
-                print(f"[VERIFY] Loaded cert: {fn}")
+                logger.debug(f"Loaded cert: {fn}")
             except Exception as e:
-                print(f"[VERIFY] Failed to load cert {fn}: {e}")
+                logger.warning(f"Failed to load cert {fn}: {e}")
     
     def verify(self, pdf_path):
         signatures = []
@@ -109,13 +116,13 @@ class PDFVerifier:
                 weak_hash_algos=set()
             )
             
-            print(f"[VERIFY] ValidationContext created with "
+            logger.debug(f"ValidationContext created with "
                   f"{len(self.trust_roots)} trust roots and "
                   f"{len(all_chain_certs)} chain certs")
             
             return vc
         except Exception as e:
-            print(f"[VERIFY] Failed to create ValidationContext: {e}")
+            logger.error(f"Failed to create ValidationContext: {e}")
             return None
     
     def _verify_signature(self, reader, sig_field, validation_context):
@@ -138,9 +145,7 @@ class PDFVerifier:
             return self._extract_signature_info(status)
         
         except Exception as e:
-            print(f"[VERIFY ERROR] Failed to validate signature: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Failed to validate signature: {e}", exc_info=True)
             
             return {
                 'signer': 'Unknown',
@@ -165,8 +170,8 @@ class PDFVerifier:
         signer_name = self._extract_signer_name(cert)
         
         if cert:
-            print(f"[DEBUG] Certificate subject: {cert.subject if hasattr(cert, 'subject') else 'N/A'}")
-            print(f"[DEBUG] Extracted signer name: {signer_name}")
+            logger.debug(f"Certificate subject: {cert.subject if hasattr(cert, 'subject') else 'N/A'}")
+            logger.debug(f"Extracted signer name: {signer_name}")
         
         timestamp = self._extract_timestamp(status)
         
@@ -184,12 +189,12 @@ class PDFVerifier:
             is_valid = False
             trust_status = 'REVOKED'
         
-        print(f"[VERIFY] Signature for {signer_name}: valid={is_valid}, "
+        logger.info(f"Signature for {signer_name}: valid={is_valid}, "
               f"trust={trust_status}, intact={getattr(status, 'intact', None)}")
         
         doc_intact = getattr(status, 'doc_mdp_ok', None)
         
-        print(f"[DEBUG] Document integrity: doc_mdp_ok={doc_intact}, "
+        logger.debug(f"Document integrity: doc_mdp_ok={doc_intact}, "
               f"modification_level={getattr(status, 'modification_level', None)}, "
               f"coverage={getattr(getattr(status, 'coverage', None), 'name', None)}")
         
@@ -250,7 +255,7 @@ class PDFVerifier:
             return {'is_revoked': False}
             
         except Exception as e:
-            print(f"[REVOCATION] Error checking revocation: {e}")
+            logger.warning(f"Error checking revocation: {e}")
             return {'is_revoked': False, 'error': str(e)}
     
     def _extract_certificate_info(self, cert):
@@ -368,12 +373,12 @@ class PDFVerifier:
                             if parts:
                                 return ' - '.join(parts)
                 except Exception as e:
-                    print(f"[WARN] Failed to lookup UserProfile: {e}")
+                    logger.debug(f"Failed to lookup UserProfile: {e}")
             
             return common_name or 'Unknown'
                                 
         except Exception as e:
-            print(f"[WARN] Cannot extract signer name: {e}")
+            logger.warning(f"Cannot extract signer name: {e}")
         
         return 'Unknown'
     
@@ -401,7 +406,7 @@ class PDFVerifier:
             return True
         
         if valid and intact and trust_problem and 'CHAIN' in str(trust_problem):
-            print(f"[VERIFY] Accepting signature despite chain issue: {trust_problem}")
+            logger.info(f"Accepting signature despite chain issue: {trust_problem}")
             return True
         
         if valid and intact:

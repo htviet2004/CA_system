@@ -1,21 +1,35 @@
+"""
+PDF signing and verification views.
 
-from django.conf import settings
-from django.http import JsonResponse, FileResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth import authenticate
+SECURITY NOTE: CSRF temporarily disabled for testing.
+TODO: Re-enable CSRF protection before production deployment.
+"""
+
+import logging
 import tempfile
 import os
 import traceback
 import hashlib
+
+from django.conf import settings
+from django.http import JsonResponse, FileResponse
+from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import authenticate
+from django.contrib.auth.decorators import login_required
+from datetime import datetime
 
 from .certificate_service import CertificateService
 from .pdf_signer import PDFSigner
 from .pdf_verifier import PDFVerifier
 from .pdf_stamp import PDFStampService
 from .utils import find_pyhanko_executable
-from datetime import datetime
+from .validators import validate_pdf_upload, validate_signature_position
+from .constants import SIGNING_DEFAULT_REASON, SIGNING_DEFAULT_LOCATION
 from usermanage.models import UserProfile
 from usercerts.models import UserCert, SigningHistory
+
+logger = logging.getLogger(__name__)
 
 
 def _find_pyhanko(preferred=None):
@@ -30,10 +44,12 @@ def _get_client_ip(request):
     return request.META.get('REMOTE_ADDR')
 
 
-def _record_signing_history(user, uploaded_file, signed_content, reason, location, request, certificate=None):
+def _record_signing_history(user, uploaded_file, signed_content, reason, request, certificate=None):
     """
     Record signing action in SigningHistory.
     Called after successful PDF signing.
+    
+    Note: location field is deprecated and no longer collected.
     """
     try:
         # Compute hash of signed document
@@ -53,38 +69,43 @@ def _record_signing_history(user, uploaded_file, signed_content, reason, locatio
             document_hash=doc_hash,
             document_size=len(signed_content),
             reason=reason,
-            location=location,
+            location='',  # Deprecated - kept for backward compatibility
             status='valid',
             ip_address=_get_client_ip(request),
             user_agent=request.META.get('HTTP_USER_AGENT', '')[:512],
         )
-        print(f"[HISTORY] Recorded signing: {uploaded_file.name} by {user.username}")
+        logger.info(f"Recorded signing history: {uploaded_file.name} by {user.username}")
     except Exception as e:
-        print(f"[HISTORY] Failed to record signing history: {e}")
+        # SECURITY: Log but don't fail the signing operation
+        logger.error(f"Failed to record signing history: {e}")
 
 
-@csrf_exempt
+@csrf_exempt  # TODO: Re-enable CSRF for production
+@login_required
+@require_http_methods(["POST"])
 def sign_file(request):
+    """
+    Sign a PDF file with user's certificate.
+    
+    NOTE: CSRF temporarily disabled for testing.
+    """
     
     try:
-        if request.method == 'OPTIONS':
-            return JsonResponse({'ok': True})
-
-        if request.method != 'POST':
-            return JsonResponse({'error': 'POST only'}, status=405)
-
         uploaded = request.FILES.get('file')
         if not uploaded:
             return JsonResponse({'error': 'no file uploaded'}, status=400)
+        
+        # SECURITY: Validate uploaded file
+        try:
+            validate_pdf_upload(uploaded)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
 
-        reason = request.POST.get('reason', 'Signed')
-        location = request.POST.get('location', '')
+        reason = request.POST.get('reason', SIGNING_DEFAULT_REASON)
         position = request.POST.get('position', '')
         
-        user = _authenticate_user(request)
-        if not user:
-            return JsonResponse({'error': 'authentication required'}, status=401)
-        
+        # SECURITY: Use session-authenticated user (already enforced by @login_required)
+        user = request.user
         username = user.username
         
         cert_service = CertificateService()
@@ -130,9 +151,8 @@ def sign_file(request):
                 page_num = field_spec_temp.on_page
                 box = field_spec_temp.box
             
-            print(f"[STAMP] Adding visual stamp at page {page_num}, box {box}")
+            logger.debug(f"Adding visual stamp at page {page_num}, box {box}")
             
-            import json
             text_config = None
             
             try:
@@ -165,7 +185,7 @@ def sign_file(request):
                 text_config=text_config
             )
             
-            print(f"[STAMP] Visual stamp added to: {stamped_path}")
+            logger.debug(f"Visual stamp added to: {stamped_path}")
             
             with PDFSigner(p12_data, passphrase, username) as signer:
                 x1, y1, x2, y2 = box
@@ -177,11 +197,11 @@ def sign_file(request):
                     out_path,
                     field_spec,
                     reason=reason,
-                    location=location,
+                    location='',  # Deprecated - kept for API compatibility
                     invisible=True
                 )
             
-            print(f"[SIGN] Signature added, output: {out_path}")
+            logger.debug(f"Signature added, output: {out_path}")
             
             if not os.path.exists(out_path):
                 raise ValueError(f'Signed PDF not created: {out_path}')
@@ -189,7 +209,7 @@ def sign_file(request):
             if os.path.getsize(out_path) == 0:
                 raise ValueError('Signed PDF is empty')
             
-            print(f"[SIGN] Output file validated: {os.path.getsize(out_path)} bytes")
+            logger.debug(f"Output file validated: {os.path.getsize(out_path)} bytes")
             
             # Record signing history
             with open(out_path, 'rb') as signed_file:
@@ -206,7 +226,6 @@ def sign_file(request):
                 uploaded_file=uploaded,
                 signed_content=signed_content,
                 reason=reason,
-                location=location,
                 request=request,
                 certificate=user_cert
             )
@@ -221,12 +240,12 @@ def sign_file(request):
                 os.unlink(in_path)
                 os.unlink(stamped_path)
             except Exception as e:
-                print(f"[WARN] Cleanup error: {e}")
+                logger.warning(f"Cleanup error: {e}")
             
             return resp
         
         except ValueError as e:
-            print(f"[ERROR] Validation error: {e}")
+            logger.warning(f"Validation error: {e}")
             try:
                 os.unlink(in_path)
                 if os.path.exists(stamped_path):
@@ -239,8 +258,7 @@ def sign_file(request):
             return JsonResponse({'error': str(e)}, status=400)
         
         except Exception as e:
-            print(f"[ERROR] Signing failed: {type(e).__name__}: {str(e)}")
-            traceback.print_exc()
+            logger.error(f"Signing failed: {type(e).__name__}: {str(e)}", exc_info=True)
             
             try:
                 os.unlink(in_path)
@@ -257,7 +275,7 @@ def sign_file(request):
             }, status=500)
     
     except Exception as exc:
-        print(f"[ERROR] Unexpected error in sign_file: {exc}")
+        logger.error(f"Unexpected error in sign_file: {exc}")
         traceback.print_exc()
         return JsonResponse({
             'error': 'Internal server error',
@@ -265,15 +283,24 @@ def sign_file(request):
         }, status=500)
 
 
-@csrf_exempt
+@csrf_exempt  # TODO: Re-enable CSRF for production
+@require_http_methods(["POST"])
 def verify_pdf(request):
+    """
+    Verify signatures in a PDF file.
     
-    if request.method != 'POST':
-        return JsonResponse({'error': 'POST only'}, status=405)
-
+    NOTE: CSRF temporarily disabled for testing.
+    Public endpoint for signature verification.
+    """
     uploaded = request.FILES.get('file')
     if not uploaded:
         return JsonResponse({'error': 'No file uploaded'}, status=400)
+    
+    # SECURITY: Validate uploaded file
+    try:
+        validate_pdf_upload(uploaded)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
 
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
     try:
@@ -290,7 +317,7 @@ def verify_pdf(request):
         return JsonResponse(result)
     
     except Exception as e:
-        print(f"[ERROR] Verification failed: {e}")
+        logger.error(f"Verification failed: {e}")
         traceback.print_exc()
         return JsonResponse({
             'error': str(e),
@@ -306,15 +333,23 @@ def verify_pdf(request):
             pass
 
 
-@csrf_exempt
+@csrf_exempt  # TODO: Re-enable CSRF for production
+@require_http_methods(["POST"])
 def get_pdf_info(request):
+    """
+    Get information about a PDF file.
     
-    if request.method != 'POST':
-        return JsonResponse({'error': 'POST only'}, status=405)
-    
+    NOTE: CSRF temporarily disabled for testing.
+    """
     uploaded = request.FILES.get('file')
     if not uploaded:
         return JsonResponse({'error': 'No file uploaded'}, status=400)
+    
+    # SECURITY: Validate uploaded file
+    try:
+        validate_pdf_upload(uploaded)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
     
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
     try:
@@ -371,15 +406,5 @@ def get_pdf_info(request):
             pass
 
 
-def _authenticate_user(request):
-    
-    if hasattr(request, 'user') and request.user.is_authenticated:
-        return request.user
-    
-    username = request.POST.get('username')
-    password = request.POST.get('password')
-    
-    if username and password:
-        return authenticate(username=username, password=password)
-    
-    return None
+# SECURITY: Removed _authenticate_user() - use @login_required decorator instead
+# POST-based authentication is vulnerable to CSRF and credential leakage

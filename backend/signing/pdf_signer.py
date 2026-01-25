@@ -1,47 +1,97 @@
+"""
+PDF Signing service using pyHanko.
 
+SECURITY: Manages temporary files securely and validates inputs.
+"""
 import os
 import tempfile
 import time
+import secrets
+import logging
 from datetime import datetime
 from pyhanko.sign import signers, fields as ph_fields, timestamps as ph_timestamps
 from pyhanko.sign.fields import SigFieldSpec
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from django.conf import settings
 
+from .validators import validate_username
+
+logger = logging.getLogger(__name__)
+
 
 class PDFSigner:
+    """Context manager for signing PDFs with PKCS#12 certificates."""
     
     def __init__(self, p12_data, passphrase, username):
-
+        """
+        Initialize PDF signer.
+        
+        SECURITY: Validates username to prevent injection attacks.
+        """
+        # SECURITY: Validate username
+        self.username = validate_username(username)
         self.p12_data = p12_data
         self.passphrase = passphrase
-        self.username = username
         self.p12_tmp = None
         self.pass_tmp = None
+        self._p12_path = None
+        self._pass_path = None
     
     def __enter__(self):
-        self.p12_tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.p12')
-        self.p12_tmp.write(self.p12_data)
-        self.p12_tmp.flush()
-        self.p12_tmp.close()
+        """Create secure temporary files for PKCS#12 and passphrase."""
+        # SECURITY: Create temp files with restrictive permissions
+        p12_fd, self._p12_path = tempfile.mkstemp(suffix='.p12')
+        try:
+            os.chmod(self._p12_path, 0o600)
+            os.write(p12_fd, self.p12_data)
+        finally:
+            os.close(p12_fd)
         
-        self.pass_tmp = tempfile.NamedTemporaryFile(
-            delete=False, mode='w', suffix='.txt'
-        )
-        self.pass_tmp.write(self.passphrase)
-        self.pass_tmp.flush()
-        self.pass_tmp.close()
+        pass_fd, self._pass_path = tempfile.mkstemp(suffix='.txt')
+        try:
+            os.chmod(self._pass_path, 0o600)
+            os.write(pass_fd, self.passphrase.encode('utf-8'))
+        finally:
+            os.close(pass_fd)
+        
+        # Create mock file objects for backward compatibility
+        class TempFile:
+            def __init__(self, path):
+                self.name = path
+        
+        self.p12_tmp = TempFile(self._p12_path)
+        self.pass_tmp = TempFile(self._pass_path)
         
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """Securely delete temporary files."""
+        self._secure_cleanup(self._p12_path)
+        self._secure_cleanup(self._pass_path)
+    
+    def _secure_cleanup(self, path):
+        """
+        Securely delete a file by overwriting before removal.
+        
+        SECURITY: Prevents recovery of sensitive key material.
+        """
+        if not path or not os.path.exists(path):
+            return
+        
         try:
-            if self.p12_tmp:
-                os.unlink(self.p12_tmp.name)
-            if self.pass_tmp:
-                os.unlink(self.pass_tmp.name)
-        except Exception:
-            pass
+            file_size = os.path.getsize(path)
+            # Overwrite with random data
+            with open(path, 'wb') as f:
+                f.write(secrets.token_bytes(file_size))
+                f.flush()
+                os.fsync(f.fileno())
+            os.unlink(path)
+        except Exception as e:
+            logger.warning(f"Failed to securely delete {path}: {e}")
+            try:
+                os.unlink(path)
+            except Exception:
+                pass
     
     def parse_position(self, position_str):
         
@@ -121,12 +171,12 @@ class PDFSigner:
         with open(input_path, 'rb') as inf:
             pdf_writer = IncrementalPdfFileWriter(inf)
             
-            print(f"[SIGN] Signing PDF with field: {field_spec.sig_field_name} "
+            logger.debug(f"Signing PDF with field: {field_spec.sig_field_name} "
                   f"on page {field_spec.on_page}, box {field_spec.box}")
             
             with open(output_path, 'wb') as outf:
                 if invisible:
-                    print("[SIGN] Adding invisible signature (no field)")
+                    logger.debug("Adding invisible signature (no field)")
                     signers.sign_pdf(
                         pdf_writer,
                         signature_meta=signature_meta,

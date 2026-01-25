@@ -18,4 +18,10 @@ urlpatterns = [
     # Revocation management (admin only)
     path('revocation/log/', views.revocation_log, name='revocation_log'),
     path('revocation/check/<str:serial_or_hash>/', views.check_revocation_status, name='check_revocation'),
+    
+    # User dashboard APIs
+    path('certificate-info/', views.get_certificate_info, name='certificate_info'),
+    path('signing-stats/', views.get_signing_stats, name='signing_stats'),
+    path('download/', views.download_certificate, name='download_certificate'),
+    path('renew/', views.renew_certificate, name='renew_certificate'),
 ]

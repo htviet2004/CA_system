@@ -29,11 +29,23 @@ export default function App() {
     e.preventDefault();
     const username = e.target.username.value;
     const password = e.target.password.value;
+    
+    // Collect profile data from enhanced registration form
+    const profileData = {
+      full_name: e.target.full_name?.value || '',
+      email: e.target.email?.value || '',
+      phone: e.target.phone?.value || '',
+      department: e.target.department?.value || '',
+      role: e.target.role?.value || 'student'
+    };
+    
     try {
-      await register(username, password);
-      showMessage(`Đăng ký thành công cho tài khoản: ${username}`, 'success');
+      await register(username, password, profileData);
+      showMessage(`Đăng ký thành công! Tài khoản ${username} đã được tạo và cấp chứng thư số PKI.`, 'success');
+      setShowAuthModal(false);
     } catch (err) {
       showMessage(`Lỗi đăng ký: ${err.message || err}`, 'error');
+      throw err; // Re-throw so AuthForm can handle it
     }
   };
 

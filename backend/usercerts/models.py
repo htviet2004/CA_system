@@ -208,3 +208,144 @@ class CertificateRevocationLog(models.Model):
     def __str__(self):
         return f"Revoked {self.certificate} at {self.revoked_at}"
 
+
+class SecurityAuditLog(models.Model):
+    """
+    Security Audit Log for tracking all security-relevant events.
+    
+    SECURITY: This is an append-only log. Records should never be modified or deleted.
+    Use this for compliance auditing, security incident investigation, and monitoring.
+    
+    Event Categories:
+    - AUTH: Authentication events (login, logout, failed attempts)
+    - CERT: Certificate operations (issue, revoke, upload)
+    - SIGN: Document signing operations
+    - ADMIN: Administrative actions (user management, permission changes)
+    - ACCESS: Access control events (forbidden access attempts)
+    - CONFIG: Configuration changes
+    """
+    
+    CATEGORY_CHOICES = [
+        ('AUTH', 'Authentication'),
+        ('CERT', 'Certificate'),
+        ('SIGN', 'Signing'),
+        ('ADMIN', 'Administration'),
+        ('ACCESS', 'Access Control'),
+        ('CONFIG', 'Configuration'),
+    ]
+    
+    SEVERITY_CHOICES = [
+        ('DEBUG', 'Debug'),
+        ('INFO', 'Info'),
+        ('WARNING', 'Warning'),
+        ('ERROR', 'Error'),
+        ('CRITICAL', 'Critical'),
+    ]
+    
+    # Event identification
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    category = models.CharField(max_length=16, choices=CATEGORY_CHOICES, db_index=True)
+    action = models.CharField(max_length=64, db_index=True)
+    severity = models.CharField(max_length=16, choices=SEVERITY_CHOICES, default='INFO')
+    
+    # Actor information
+    user = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='audit_logs'
+    )
+    username = models.CharField(max_length=150, blank=True, db_index=True)  # Preserved even if user deleted
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=512, blank=True)
+    
+    # Event details
+    target_type = models.CharField(max_length=64, blank=True)  # e.g., 'User', 'Certificate', 'Document'
+    target_id = models.CharField(max_length=128, blank=True)  # ID of the target object
+    description = models.TextField(blank=True)
+    
+    # Outcome
+    success = models.BooleanField(default=True)
+    error_message = models.TextField(blank=True)
+    
+    # Additional context (JSON-encoded)
+    extra_data = models.JSONField(default=dict, blank=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['timestamp']),
+            models.Index(fields=['category', 'action']),
+            models.Index(fields=['user', 'timestamp']),
+            models.Index(fields=['username', 'timestamp']),
+            models.Index(fields=['ip_address']),
+            models.Index(fields=['success', 'category']),
+        ]
+        # SECURITY: Prevent accidental deletion of audit records
+        permissions = [
+            ('view_audit_logs', 'Can view security audit logs'),
+            ('export_audit_logs', 'Can export security audit logs'),
+        ]
+
+    def __str__(self):
+        return f"[{self.timestamp}] {self.category}/{self.action} by {self.username or 'anonymous'}"
+    
+    @classmethod
+    def log(cls, category, action, request=None, user=None, success=True, 
+            severity='INFO', target_type='', target_id='', description='',
+            error_message='', extra_data=None):
+        """
+        Create an audit log entry.
+        
+        Args:
+            category: Event category (AUTH, CERT, SIGN, ADMIN, ACCESS, CONFIG)
+            action: Specific action (e.g., 'LOGIN', 'LOGOUT', 'ISSUE_CERT')
+            request: Django request object (optional, for IP/user agent)
+            user: User object (optional, falls back to request.user)
+            success: Whether the action succeeded
+            severity: Log severity (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+            target_type: Type of object affected
+            target_id: ID of object affected
+            description: Human-readable description
+            error_message: Error details if success=False
+            extra_data: Additional JSON-serializable data
+        """
+        username = ''
+        ip_address = None
+        user_agent = ''
+        
+        if request:
+            # Get user from request if not provided
+            if user is None and hasattr(request, 'user') and request.user.is_authenticated:
+                user = request.user
+            
+            # Get IP address
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                ip_address = x_forwarded_for.split(',')[0].strip()
+            else:
+                ip_address = request.META.get('REMOTE_ADDR')
+            
+            # Get user agent
+            user_agent = request.META.get('HTTP_USER_AGENT', '')[:512]
+        
+        if user:
+            username = user.username
+        
+        return cls.objects.create(
+            category=category,
+            action=action,
+            severity=severity,
+            user=user,
+            username=username,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            target_type=target_type,
+            target_id=str(target_id) if target_id else '',
+            description=description,
+            success=success,
+            error_message=error_message,
+            extra_data=extra_data or {},
+        )
+

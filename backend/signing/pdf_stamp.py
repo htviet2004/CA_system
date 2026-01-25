@@ -1,5 +1,11 @@
+"""
+PDF Stamping service for visual signatures.
+
+Creates visual stamp overlays for signed PDFs.
+"""
 import io
 import os
+import logging
 from reportlab.pdfgen import canvas
 from reportlab.lib.colors import HexColor
 from reportlab.pdfbase import pdfmetrics
@@ -7,16 +13,18 @@ from reportlab.pdfbase.ttfonts import TTFont
 from pypdf import PdfReader, PdfWriter
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
+
 try:
     pdfmetrics.registerFont(TTFont('ArialUnicode', 'arial.ttf'))
     pdfmetrics.registerFont(TTFont('ArialUnicode-Bold', 'arialbd.ttf'))
     FONT = 'ArialUnicode'
     FONT_BOLD = 'ArialUnicode-Bold'
-    print("[FONT] Using Arial Unicode for Vietnamese support")
-except:
+    logger.info("Using Arial Unicode for Vietnamese support")
+except Exception:
     FONT = 'Helvetica'
     FONT_BOLD = 'Helvetica-Bold'
-    print("[FONT] Warning: Arial not found, using Helvetica (no Vietnamese support)")
+    logger.warning("Arial not found, using Helvetica (no Vietnamese support)")
 
 
 class PDFStampService:
@@ -117,12 +125,12 @@ class PDFStampService:
         for i, page in enumerate(reader.pages):
             if i == page_num:
                 page.merge_page(stamp_page)
-                print(f"[STAMP DEBUG] Merged stamp onto page {i}")
+                logger.debug(f"Merged stamp onto page {i}")
             writer.add_page(page)
         
         with open(output_pdf_path, 'wb') as f:
             writer.write(f)
         
-        print(f"[STAMP DEBUG] Written stamped PDF to {output_pdf_path}, size: {os.path.getsize(output_pdf_path)} bytes")
+        logger.debug(f"Written stamped PDF to {output_pdf_path}, size: {os.path.getsize(output_pdf_path)} bytes")
         
         return output_pdf_path
