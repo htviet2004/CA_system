@@ -96,6 +96,16 @@ STATICFILES_DIRS = [
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# =============================================================================
+# SIGNED PDF STORAGE CONFIGURATION
+# =============================================================================
+# Directory for storing signed PDFs temporarily
+SIGNED_PDF_STORAGE_DIR = BASE_DIR / "signed_documents"
+# Retention period in days (configurable: 7-30 days)
+SIGNED_PDF_RETENTION_DAYS = int(os.environ.get('SIGNED_PDF_RETENTION_DAYS', '14'))
+# Maximum file size for signed PDFs (50MB)
+SIGNED_PDF_MAX_SIZE = 52428800
+
 PYHANKO_CLI = str(BASE_DIR.parent / 'env' / 'Scripts' / 'pyhanko.exe')
 DEFAULT_SIGNER_P12 = str(BASE_DIR / 'users' / 'userA' / 'userA.p12')
 DEFAULT_SIGNER_P12_PASSFILE = str(BASE_DIR / 'users' / 'userA' / 'p12.pass')

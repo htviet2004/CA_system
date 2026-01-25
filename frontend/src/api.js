@@ -208,6 +208,70 @@ export async function getSigningHistory(page = 1, limit = 50) {
   return res.json()
 }
 
+/**
+ * SIGNED DOCUMENTS API
+ * List and download signed PDFs stored on server
+ */
+export async function getSignedDocuments(page = 1, perPage = 20, filters = {}) {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    per_page: perPage.toString()
+  })
+  
+  if (filters.status) params.append('status', filters.status)
+  if (filters.search) params.append('search', filters.search)
+  if (filters.downloadable_only) params.append('downloadable_only', 'true')
+  
+  const res = await fetch(`/api/sign/history/?${params}`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+export async function getSignedDocumentDetail(documentId) {
+  const res = await fetch(`/api/sign/history/${documentId}/`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) {
+    if (res.status === 404) throw new Error('Tài liệu không tồn tại')
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+export async function downloadSignedDocument(documentId) {
+  const res = await fetch(`/api/sign/history/${documentId}/download/`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) {
+    if (res.status === 410) throw new Error('Tài liệu đã hết hạn lưu trữ')
+    if (res.status === 404) throw new Error('Tài liệu không tồn tại')
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.blob()
+}
+
+export async function getSigningHistoryStats() {
+  const res = await fetch('/api/sign/history/stats/', {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
 export async function getSigningStats() {
   const res = await fetch('/api/usercerts/signing-stats/', {
     method: 'GET',

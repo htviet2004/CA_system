@@ -14,7 +14,9 @@ import SignPDF from './components/SignPDF';
 import PDFVerifier from './components/PDFVerifier';
 import UserProfile from './components/UserProfile';
 import SigningHistory from './components/SigningHistory';
+import SigningHistoryDetail from './components/SigningHistoryDetail';
 import CertificateManager from './components/CertificateManager';
+import ChangePassword from './components/ChangePassword';
 import './static/styles/variables.css';
 import './static/styles/global.css';
 import './static/styles/components.css';
@@ -276,10 +278,57 @@ function AppContent() {
             } 
           />
           <Route 
+            path="/signing-history/:documentId" 
+            element={
+              user ? (
+                <SigningHistoryDetail showMessage={showMessage} />
+              ) : (
+                <Navigate to="/sign" replace />
+              )
+            } 
+          />
+          <Route 
             path="/certificates" 
             element={
               user ? (
                 <CertificateManager showMessage={showMessage} />
+              ) : (
+                <Navigate to="/sign" replace />
+              )
+            } 
+          />
+          <Route 
+            path="/download-cert" 
+            element={
+              user ? (
+                <Navigate to="/certificates" replace />
+              ) : (
+                <Navigate to="/sign" replace />
+              )
+            } 
+          />
+          <Route 
+            path="/change-password" 
+            element={
+              user ? (
+                <ChangePassword 
+                  showMessage={showMessage}
+                  onBack={() => navigate(-1)}
+                />
+              ) : (
+                <Navigate to="/sign" replace />
+              )
+            } 
+          />
+          {/* Admin routes */}
+          <Route 
+            path="/admin/users" 
+            element={
+              user?.is_staff ? (
+                <div className="admin-placeholder">
+                  <h2>Quản lý người dùng</h2>
+                  <p>Tính năng đang được phát triển</p>
+                </div>
               ) : (
                 <Navigate to="/sign" replace />
               )

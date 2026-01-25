@@ -86,7 +86,7 @@ class UserCert(models.Model):
 class SigningHistory(models.Model):
     """
     Digital Signing History Model
-    Records every PDF signing action for audit trail.
+    Records every PDF signing action for audit trail and file storage.
     
     Fields:
         - user: User who performed the signing
@@ -95,13 +95,21 @@ class SigningHistory(models.Model):
         - document_hash: SHA-256 hash of signed document
         - document_size: File size in bytes
         - signed_at: Timestamp of signing
+        - expires_at: When the stored file expires and can be deleted
         - reason: Signing reason/purpose
-        - location: Signing location
-        - status: Current status (valid/revoked/expired)
+        - location: Signing location (deprecated)
+        - status: Current status (valid/revoked/expired/deleted)
+        - file_path: Path to stored signed PDF (relative to SIGNED_PDF_STORAGE_DIR)
+        - download_count: Number of times the file has been downloaded
         - ip_address: IP address of signer
     
+    File Storage:
+        - Signed PDFs are stored for a configurable retention period
+        - Files are stored in SIGNED_PDF_STORAGE_DIR/{year}/{month}/{user_id}/
+        - After expires_at, files can be cleaned up by scheduled task
+    
     Immutability:
-        - Records are append-only (no updates except status)
+        - Records are append-only (no updates except status/download_count)
         - Hash ensures document integrity verification
     """
     
@@ -110,6 +118,7 @@ class SigningHistory(models.Model):
         ('revoked', 'Revoked'),
         ('expired', 'Expired'),
         ('invalid', 'Invalid'),
+        ('deleted', 'Deleted'),  # File has been cleaned up
     ]
     
     user = models.ForeignKey(
@@ -129,10 +138,25 @@ class SigningHistory(models.Model):
     document_hash = models.CharField(max_length=64, db_index=True)  # SHA-256
     document_size = models.BigIntegerField(default=0)
     
+    # File storage - NEW FIELDS
+    file_path = models.CharField(
+        max_length=1024, 
+        blank=True,
+        help_text="Relative path to signed PDF in SIGNED_PDF_STORAGE_DIR"
+    )
+    download_count = models.PositiveIntegerField(default=0)
+    last_downloaded_at = models.DateTimeField(null=True, blank=True)
+    
     # Signing metadata
     signed_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    expires_at = models.DateTimeField(
+        null=True, 
+        blank=True, 
+        db_index=True,
+        help_text="When the stored file expires and can be deleted"
+    )
     reason = models.CharField(max_length=512, blank=True)
-    location = models.CharField(max_length=256, blank=True)
+    location = models.CharField(max_length=256, blank=True)  # Deprecated
     
     # Status and audit
     status = models.CharField(
@@ -165,6 +189,7 @@ class SigningHistory(models.Model):
             models.Index(fields=['user', 'signed_at']),
             models.Index(fields=['document_hash']),
             models.Index(fields=['status']),
+            models.Index(fields=['expires_at']),  # For cleanup queries
         ]
         verbose_name_plural = 'Signing histories'
 
@@ -184,6 +209,41 @@ class SigningHistory(models.Model):
         self.revoked_by = revoked_by
         self.revocation_reason = reason
         self.save()
+    
+    def is_expired(self):
+        """Check if the stored file has expired."""
+        from django.utils import timezone
+        if not self.expires_at:
+            return False
+        return timezone.now() > self.expires_at
+    
+    def is_downloadable(self):
+        """Check if the file can be downloaded."""
+        return (
+            self.file_path and 
+            self.status in ('valid', 'revoked') and 
+            not self.is_expired()
+        )
+    
+    def get_full_file_path(self):
+        """Get the full filesystem path to the stored file."""
+        from django.conf import settings
+        if not self.file_path:
+            return None
+        return settings.SIGNED_PDF_STORAGE_DIR / self.file_path
+    
+    def increment_download(self):
+        """Increment download counter and update last downloaded timestamp."""
+        from django.utils import timezone
+        self.download_count += 1
+        self.last_downloaded_at = timezone.now()
+        self.save(update_fields=['download_count', 'last_downloaded_at', 'updated_at'])
+    
+    def mark_deleted(self):
+        """Mark the file as deleted (after cleanup)."""
+        self.status = 'deleted'
+        self.file_path = ''
+        self.save(update_fields=['status', 'file_path', 'updated_at'])
 
 
 class CertificateRevocationLog(models.Model):

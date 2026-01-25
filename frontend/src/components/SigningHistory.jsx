@@ -12,9 +12,11 @@ import {
   Download,
   RefreshCw,
   Calendar,
-  Shield
+  Shield,
+  Trash2,
+  Eye
 } from 'lucide-react';
-import { getSigningHistory } from '../api';
+import { getSignedDocuments, downloadSignedDocument, getSigningHistoryStats } from '../api';
 import '../static/styles/signing-history.css';
 
 /**
@@ -25,53 +27,103 @@ import '../static/styles/signing-history.css';
  * - Signing time
  * - Certificate used
  * - Signature status
+ * - Download capability (for non-expired documents)
  * 
  * Features:
  * - Search/filter
  * - Status filtering
  * - Pagination
- * - Export capability
+ * - Download signed PDFs
+ * - Expiration indicators
  */
 export default function SigningHistory({ username }) {
   const navigate = useNavigate();
-  const [history, setHistory] = useState([]);
+  const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [downloadableOnly, setDownloadableOnly] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [pagination, setPagination] = useState({ total: 0, total_pages: 1 });
+  const [stats, setStats] = useState(null);
+  const [downloading, setDownloading] = useState(null); // Track which document is downloading
+  const itemsPerPage = 20;
 
   useEffect(() => {
-    loadHistory();
-  }, [username]);
+    loadDocuments();
+    loadStats();
+  }, [currentPage, statusFilter, downloadableOnly]);
 
-  const loadHistory = async () => {
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (currentPage === 1) {
+        loadDocuments();
+      } else {
+        setCurrentPage(1);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  const loadDocuments = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await getSigningHistory();
-      setHistory(data.history || []);
+      const filters = {
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        search: searchTerm || undefined,
+        downloadable_only: downloadableOnly || undefined
+      };
+      const data = await getSignedDocuments(currentPage, itemsPerPage, filters);
+      setDocuments(data.documents || []);
+      setPagination(data.pagination || { total: 0, total_pages: 1 });
     } catch (err) {
       setError('Không thể tải lịch sử ký số: ' + (err.message || err));
+      setDocuments([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Filter and search
-  const filteredHistory = history.filter(item => {
-    const matchesSearch = item.document_name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const loadStats = async () => {
+    try {
+      const data = await getSigningHistoryStats();
+      setStats(data);
+    } catch (err) {
+      console.error('Failed to load stats:', err);
+    }
+  };
 
-  // Pagination
-  const totalPages = Math.ceil(filteredHistory.length / itemsPerPage);
-  const paginatedHistory = filteredHistory.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const handleDownload = async (doc) => {
+    if (!doc.is_downloadable) {
+      alert('Tài liệu này không còn khả dụng để tải xuống');
+      return;
+    }
+
+    try {
+      setDownloading(doc.id);
+      const blob = await downloadSignedDocument(doc.id);
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.document_name.replace('.pdf', '_signed.pdf');
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      // Refresh to update download count
+      loadDocuments();
+    } catch (err) {
+      alert('Lỗi tải xuống: ' + (err.message || err));
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   // Status badge component
   const StatusBadge = ({ status }) => {
@@ -79,6 +131,7 @@ export default function SigningHistory({ username }) {
       valid: { icon: CheckCircle, text: 'Hợp lệ', className: 'status-valid' },
       revoked: { icon: XCircle, text: 'Đã thu hồi', className: 'status-revoked' },
       expired: { icon: AlertTriangle, text: 'Hết hạn', className: 'status-expired' },
+      deleted: { icon: Trash2, text: 'Đã xóa', className: 'status-deleted' },
       invalid: { icon: XCircle, text: 'Không hợp lệ', className: 'status-invalid' }
     };
 
@@ -92,8 +145,28 @@ export default function SigningHistory({ username }) {
     );
   };
 
+  // Downloadable badge
+  const DownloadableBadge = ({ doc }) => {
+    if (!doc.file_path) {
+      return <span className="download-badge unavailable">Không lưu</span>;
+    }
+    if (!doc.is_downloadable) {
+      return <span className="download-badge expired">Hết hạn tải</span>;
+    }
+    
+    const expiresAt = new Date(doc.expires_at);
+    const now = new Date();
+    const daysLeft = Math.ceil((expiresAt - now) / (1000 * 60 * 60 * 24));
+    
+    if (daysLeft <= 3) {
+      return <span className="download-badge warning">Còn {daysLeft} ngày</span>;
+    }
+    return <span className="download-badge available">Có thể tải</span>;
+  };
+
   // Format date
   const formatDate = (dateString) => {
+    if (!dateString) return '-';
     const date = new Date(dateString);
     return date.toLocaleString('vi-VN', {
       day: '2-digit',
@@ -142,7 +215,10 @@ export default function SigningHistory({ username }) {
           <Filter size={18} />
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setCurrentPage(1);
+            }}
           >
             <option value="all">Tất cả trạng thái</option>
             <option value="valid">Hợp lệ</option>
@@ -151,7 +227,20 @@ export default function SigningHistory({ username }) {
           </select>
         </div>
 
-        <button className="refresh-button" onClick={loadHistory} disabled={loading}>
+        <label className="filter-checkbox">
+          <input
+            type="checkbox"
+            checked={downloadableOnly}
+            onChange={(e) => {
+              setDownloadableOnly(e.target.checked);
+              setCurrentPage(1);
+            }}
+          />
+          <Download size={16} />
+          Chỉ hiện có thể tải
+        </label>
+
+        <button className="refresh-button" onClick={loadDocuments} disabled={loading}>
           <RefreshCw size={18} className={loading ? 'spinning' : ''} />
           Làm mới
         </button>
@@ -160,20 +249,20 @@ export default function SigningHistory({ username }) {
       {/* Stats Summary */}
       <div className="history-stats">
         <div className="stat-card">
-          <span className="stat-number">{history.length}</span>
+          <span className="stat-number">{stats?.total_documents || pagination.total || 0}</span>
           <span className="stat-label">Tổng số</span>
         </div>
         <div className="stat-card valid">
-          <span className="stat-number">{history.filter(h => h.status === 'valid').length}</span>
+          <span className="stat-number">{stats?.by_status?.valid || 0}</span>
           <span className="stat-label">Hợp lệ</span>
         </div>
         <div className="stat-card warning">
-          <span className="stat-number">{history.filter(h => h.status === 'revoked').length}</span>
-          <span className="stat-label">Thu hồi</span>
+          <span className="stat-number">{stats?.downloadable_count || 0}</span>
+          <span className="stat-label">Có thể tải</span>
         </div>
-        <div className="stat-card expired">
-          <span className="stat-number">{history.filter(h => h.status === 'expired').length}</span>
-          <span className="stat-label">Hết hạn</span>
+        <div className="stat-card info">
+          <span className="stat-number">{stats?.total_downloads || 0}</span>
+          <span className="stat-label">Lượt tải</span>
         </div>
       </div>
 
@@ -187,13 +276,16 @@ export default function SigningHistory({ username }) {
         <div className="error-state">
           <AlertTriangle size={32} />
           <p>{error}</p>
-          <button onClick={loadHistory}>Thử lại</button>
+          <button onClick={loadDocuments}>Thử lại</button>
         </div>
-      ) : filteredHistory.length === 0 ? (
+      ) : documents.length === 0 ? (
         <div className="empty-state">
           <FileText size={48} />
           <h3>Chưa có lịch sử ký số</h3>
           <p>Bạn chưa ký số tài liệu nào hoặc không có kết quả phù hợp với bộ lọc.</p>
+          <button className="primary-button" onClick={() => navigate('/sign')}>
+            Ký tài liệu mới
+          </button>
         </div>
       ) : (
         <>
@@ -207,44 +299,65 @@ export default function SigningHistory({ username }) {
                   <th>Chứng chỉ</th>
                   <th>Kích thước</th>
                   <th>Trạng thái</th>
+                  <th>Tải xuống</th>
                   <th>Hành động</th>
                 </tr>
               </thead>
               <tbody>
-                {paginatedHistory.map((item, index) => (
-                  <tr key={item.id || index}>
+                {documents.map((doc) => (
+                  <tr key={doc.id}>
                     <td className="doc-name">
                       <FileText size={16} />
-                      <span title={item.document_name}>
-                        {item.document_name.length > 40 
-                          ? item.document_name.substring(0, 40) + '...' 
-                          : item.document_name}
+                      <span title={doc.document_name}>
+                        {doc.document_name.length > 35 
+                          ? doc.document_name.substring(0, 35) + '...' 
+                          : doc.document_name}
                       </span>
                     </td>
                     <td className="sign-time">
                       <Calendar size={14} />
-                      {formatDate(item.signed_at)}
+                      {formatDate(doc.signed_at)}
                     </td>
                     <td className="cert-info">
                       <Shield size={14} />
-                      {item.certificate_cn || 'N/A'}
+                      {doc.certificate_cn || 'N/A'}
                     </td>
                     <td className="doc-size">
-                      {formatSize(item.document_size)}
+                      {formatSize(doc.document_size)}
                     </td>
                     <td>
-                      <StatusBadge status={item.status} />
+                      <StatusBadge status={doc.status} />
+                    </td>
+                    <td>
+                      <DownloadableBadge doc={doc} />
+                      {doc.download_count > 0 && (
+                        <span className="download-count" title="Số lần tải">
+                          ({doc.download_count})
+                        </span>
+                      )}
                     </td>
                     <td className="actions">
-                      {item.document_hash && (
+                      {doc.is_downloadable && (
                         <button 
-                          className="action-btn"
-                          title="Xem chi tiết"
-                          onClick={() => navigate(`/signing-history/${item.id}`)}
+                          className="action-btn download-btn"
+                          title="Tải xuống PDF đã ký"
+                          onClick={() => handleDownload(doc)}
+                          disabled={downloading === doc.id}
                         >
-                          <Search size={14} />
+                          {downloading === doc.id ? (
+                            <RefreshCw size={14} className="spinning" />
+                          ) : (
+                            <Download size={14} />
+                          )}
                         </button>
                       )}
+                      <button 
+                        className="action-btn"
+                        title="Xem chi tiết"
+                        onClick={() => navigate(`/signing-history/${doc.id}`)}
+                      >
+                        <Eye size={14} />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -253,7 +366,7 @@ export default function SigningHistory({ username }) {
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {pagination.total_pages > 1 && (
             <div className="pagination">
               <button 
                 disabled={currentPage === 1}
@@ -261,15 +374,23 @@ export default function SigningHistory({ username }) {
               >
                 Trước
               </button>
-              <span>Trang {currentPage} / {totalPages}</span>
+              <span>Trang {currentPage} / {pagination.total_pages}</span>
               <button 
-                disabled={currentPage === totalPages}
+                disabled={currentPage === pagination.total_pages}
                 onClick={() => setCurrentPage(p => p + 1)}
               >
                 Sau
               </button>
             </div>
           )}
+
+          {/* Retention Notice */}
+          <div className="retention-notice">
+            <Clock size={16} />
+            <span>
+              Tài liệu đã ký được lưu trữ trong 14 ngày. Sau thời gian này, bạn sẽ không thể tải xuống.
+            </span>
+          </div>
         </>
       )}
     </div>

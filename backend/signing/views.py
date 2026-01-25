@@ -44,13 +44,27 @@ def _get_client_ip(request):
     return request.META.get('REMOTE_ADDR')
 
 
-def _record_signing_history(user, uploaded_file, signed_content, reason, request, certificate=None):
+def _record_signing_history(user, uploaded_file, signed_content, reason, request, certificate=None, store_file=True):
     """
-    Record signing action in SigningHistory.
+    Record signing action in SigningHistory and optionally store the signed PDF.
     Called after successful PDF signing.
+    
+    Args:
+        user: Django User object
+        uploaded_file: Uploaded file object
+        signed_content: bytes - The signed PDF content
+        reason: str - Signing reason
+        request: Django request object
+        certificate: UserCert object (optional)
+        store_file: bool - Whether to store the signed PDF for later download
+    
+    Returns:
+        SigningHistory object or None if failed
     
     Note: location field is deprecated and no longer collected.
     """
+    from .storage_service import SignedPDFStorageService
+    
     try:
         # Compute hash of signed document
         doc_hash = hashlib.sha256(signed_content).hexdigest()
@@ -62,12 +76,31 @@ def _record_signing_history(user, uploaded_file, signed_content, reason, request
                 active=True
             ).order_by('-created_at').first()
         
-        SigningHistory.objects.create(
+        # Store signed PDF file
+        file_path = ''
+        expires_at = None
+        
+        if store_file:
+            try:
+                storage_service = SignedPDFStorageService()
+                file_path, expires_at = storage_service.store_signed_pdf(
+                    user=user,
+                    pdf_content=signed_content,
+                    original_filename=uploaded_file.name or 'signed.pdf'
+                )
+                logger.info(f"Stored signed PDF: {file_path}, expires: {expires_at}")
+            except Exception as e:
+                logger.error(f"Failed to store signed PDF: {e}")
+                # Continue without storing - the signing itself succeeded
+        
+        history = SigningHistory.objects.create(
             user=user,
             certificate=certificate,
             document_name=uploaded_file.name or 'unknown.pdf',
             document_hash=doc_hash,
             document_size=len(signed_content),
+            file_path=file_path,
+            expires_at=expires_at,
             reason=reason,
             location='',  # Deprecated - kept for backward compatibility
             status='valid',
@@ -75,9 +108,12 @@ def _record_signing_history(user, uploaded_file, signed_content, reason, request
             user_agent=request.META.get('HTTP_USER_AGENT', '')[:512],
         )
         logger.info(f"Recorded signing history: {uploaded_file.name} by {user.username}")
+        return history
+        
     except Exception as e:
         # SECURITY: Log but don't fail the signing operation
         logger.error(f"Failed to record signing history: {e}")
+        return None
 
 
 @csrf_exempt  # TODO: Re-enable CSRF for production
