@@ -17,11 +17,13 @@ import SigningHistory from './components/SigningHistory';
 import SigningHistoryDetail from './components/SigningHistoryDetail';
 import CertificateManager from './components/CertificateManager';
 import ChangePassword from './components/ChangePassword';
+import AdminDashboard from './components/AdminDashboard';
 import './static/styles/variables.css';
 import './static/styles/global.css';
 import './static/styles/components.css';
 import './static/styles/signing-history.css';
 import './static/styles/certificate-manager.css';
+import './static/styles/admin.css';
 
 /**
  * Main Application Component with Client-Side Routing
@@ -322,13 +324,20 @@ function AppContent() {
           />
           {/* Admin routes */}
           <Route 
-            path="/admin/users" 
+            path="/admin" 
             element={
               user?.is_staff ? (
-                <div className="admin-placeholder">
-                  <h2>Quản lý người dùng</h2>
-                  <p>Tính năng đang được phát triển</p>
-                </div>
+                <AdminDashboard showMessage={showMessage} />
+              ) : (
+                <Navigate to="/sign" replace />
+              )
+            } 
+          />
+          <Route 
+            path="/admin/*" 
+            element={
+              user?.is_staff ? (
+                <AdminDashboard showMessage={showMessage} />
               ) : (
                 <Navigate to="/sign" replace />
               )

@@ -239,11 +239,11 @@ export default function UserDropdown({
                 <div className="dropdown-divider" />
                 <button 
                   className="dropdown-item admin-item"
-                  onClick={() => handleMenuClick(() => navigate('/admin/users'))}
+                  onClick={() => handleMenuClick(() => navigate('/admin'))}
                   role="menuitem"
                 >
                   <Settings size={18} />
-                  <span>Quản lý người dùng</span>
+                  <span>Admin Dashboard</span>
                 </button>
               </>
             )}

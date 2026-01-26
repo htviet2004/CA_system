@@ -360,3 +360,212 @@ export async function changePassword(currentPassword, newPassword) {
   }
   return res.json()
 }
+
+// =============================================================================
+// ADMIN API
+// =============================================================================
+
+/**
+ * Admin Dashboard Stats
+ */
+export async function getAdminDashboardStats() {
+  const res = await fetch('/api/usermanage/admin/stats/', {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) {
+    if (res.status === 403) throw new Error('Admin access required')
+    throw new Error('Failed to fetch admin stats')
+  }
+  return res.json()
+}
+
+/**
+ * Admin Meta (roles, departments, etc.)
+ */
+export async function getAdminMeta() {
+  const res = await fetch('/api/usermanage/admin/meta/', {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) throw new Error('Failed to fetch admin meta')
+  return res.json()
+}
+
+/**
+ * Admin User Management
+ */
+export async function adminListUsers(params = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.page) searchParams.append('page', params.page)
+  if (params.per_page) searchParams.append('per_page', params.per_page)
+  if (params.search) searchParams.append('search', params.search)
+  if (params.is_active !== undefined) searchParams.append('is_active', params.is_active)
+  if (params.is_staff !== undefined) searchParams.append('is_staff', params.is_staff)
+  if (params.role) searchParams.append('role', params.role)
+  if (params.department) searchParams.append('department', params.department)
+  if (params.sort) searchParams.append('sort', params.sort)
+  
+  const res = await fetch(`/api/usermanage/admin/users/?${searchParams}`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) {
+    if (res.status === 403) throw new Error('Admin access required')
+    throw new Error('Failed to fetch users')
+  }
+  return res.json()
+}
+
+export async function adminGetUser(userId) {
+  const res = await fetch(`/api/usermanage/admin/users/${userId}/`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) {
+    if (res.status === 404) throw new Error('User not found')
+    throw new Error('Failed to fetch user')
+  }
+  return res.json()
+}
+
+export async function adminCreateUser(userData) {
+  const res = await fetch('/api/usermanage/admin/users/create/', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrf()
+    },
+    body: JSON.stringify(userData)
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: 'Failed to create user' }))
+    throw new Error(data.error || 'Failed to create user')
+  }
+  return res.json()
+}
+
+export async function adminUpdateUser(userId, userData) {
+  const res = await fetch(`/api/usermanage/admin/users/${userId}/update/`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrf()
+    },
+    body: JSON.stringify(userData)
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: 'Failed to update user' }))
+    throw new Error(data.error || 'Failed to update user')
+  }
+  return res.json()
+}
+
+export async function adminDeleteUser(userId, hardDelete = false) {
+  const params = hardDelete ? '?hard=true' : ''
+  const res = await fetch(`/api/usermanage/admin/users/${userId}/delete/${params}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: {
+      'X-CSRFToken': getCsrf()
+    }
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: 'Failed to delete user' }))
+    throw new Error(data.error || 'Failed to delete user')
+  }
+  return res.json()
+}
+
+export async function adminResetUserPassword(userId) {
+  const res = await fetch(`/api/usermanage/admin/users/${userId}/reset-password/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'X-CSRFToken': getCsrf()
+    }
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: 'Failed to reset password' }))
+    throw new Error(data.error || 'Failed to reset password')
+  }
+  return res.json()
+}
+
+/**
+ * Admin Certificate Management
+ */
+export async function adminListCertificates(params = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.page) searchParams.append('page', params.page)
+  if (params.per_page) searchParams.append('per_page', params.per_page)
+  if (params.search) searchParams.append('search', params.search)
+  if (params.status) searchParams.append('status', params.status)
+  if (params.user_id) searchParams.append('user_id', params.user_id)
+  
+  const res = await fetch(`/api/usermanage/admin/certificates/?${searchParams}`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) throw new Error('Failed to fetch certificates')
+  return res.json()
+}
+
+/**
+ * Admin Signing History Management
+ */
+export async function adminListSigningHistory(params = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.page) searchParams.append('page', params.page)
+  if (params.per_page) searchParams.append('per_page', params.per_page)
+  if (params.search) searchParams.append('search', params.search)
+  if (params.status) searchParams.append('status', params.status)
+  if (params.user_id) searchParams.append('user_id', params.user_id)
+  if (params.date_from) searchParams.append('date_from', params.date_from)
+  if (params.date_to) searchParams.append('date_to', params.date_to)
+  
+  const res = await fetch(`/api/usermanage/admin/signing-history/?${searchParams}`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) throw new Error('Failed to fetch signing history')
+  return res.json()
+}
+
+export async function adminRevokeSignature(historyId) {
+  const res = await fetch(`/api/usermanage/admin/signing-history/${historyId}/revoke/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'X-CSRFToken': getCsrf()
+    }
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: 'Failed to revoke signature' }))
+    throw new Error(data.error || 'Failed to revoke signature')
+  }
+  return res.json()
+}
+
+/**
+ * Admin Certificate Revocation
+ */
+export async function adminRevokeCertificate(certId, reason = 'unspecified') {
+  const res = await fetch(`/api/usermanage/admin/certificates/${certId}/revoke/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrf()
+    },
+    body: JSON.stringify({ reason })
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: 'Failed to revoke certificate' }))
+    throw new Error(data.error || 'Failed to revoke certificate')
+  }
+  return res.json()
+}
+
