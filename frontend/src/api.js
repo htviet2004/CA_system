@@ -75,3 +75,60 @@ export async function fetchProfile(username){
   }
   return res.json()
 }
+export async function checkCachedPdf(){
+  const res = await fetch('/api/sign/check-cache/', {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if(!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function getCachedPdf(pdfId){
+  const url = pdfId 
+    ? `/api/sign/cached-pdf/?pdf_id=${encodeURIComponent(pdfId)}`
+    : '/api/sign/cached-pdf/'
+  const res = await fetch(url, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if(!res.ok) throw new Error(await res.text())
+  return res.blob()
+}
+
+export async function clearCachedPdf(){
+  const res = await fetch('/api/sign/clear-cache/', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRFToken': getCsrf() }
+  })
+  if(!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function verifyCacheStatus(){
+  const res = await fetch('/api/sign/verify-cache-status/', {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if(!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function getSignedPdfsLog(){
+  const res = await fetch('/api/sign/signed-pdfs-log/', {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if(!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function downloadSignedPdf(pdfId){
+  const res = await fetch(`/api/sign/cached-pdf/?pdf_id=${encodeURIComponent(pdfId)}`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if(!res.ok) throw new Error(await res.text())
+  return res.blob()
+}

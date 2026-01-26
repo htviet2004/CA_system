@@ -6,7 +6,8 @@ import {
   LogIn,
   LogOut,
   User,
-  Settings
+  Settings,
+  FileText
 } from 'lucide-react';
 import '../static/styles/header.css';
 
@@ -16,7 +17,8 @@ export default function Header({
   onTabChange,
   onAuthClick,
   onLogout,
-  onEditProfile
+  onEditProfile,
+  onShowPdfLog
 }) {
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
@@ -85,7 +87,6 @@ export default function Header({
                     </div>
                     <div className="dropdown-user-info">
                       <div className="dropdown-username">{username}</div>
-                      <div className="dropdown-user-sub">CA System</div>
                     </div>
                   </div>
                   <button
@@ -97,6 +98,16 @@ export default function Header({
                   >
                     <Settings size={16} />
                     <span>Chỉnh sửa thông tin</span>
+                  </button>
+                  <button
+                    className="dropdown-item"
+                    onClick={() => {
+                      onShowPdfLog();
+                      setShowDropdown(false);
+                    }}
+                  >
+                    <FileText size={16} />
+                    <span>Các PDF đã ký</span>
                   </button>
                   <button
                     className="dropdown-item logout-item"

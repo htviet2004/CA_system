@@ -97,4 +97,4 @@ USE_I18N = True
 
 USE_TZ = True
 
-
+SIGNED_PDF_CACHE_TTL = 7200 

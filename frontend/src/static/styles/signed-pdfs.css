@@ -1,0 +1,322 @@
+/* Signed PDFs List Styles */
+
+.signed-pdfs-container {
+  width: 100%;
+  max-height: 600px;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.signed-pdfs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: linear-gradient(135deg, #f3f4f6 0%, #ffffff 100%);
+}
+
+.signed-pdfs-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.signed-pdfs-count {
+  padding: 4px 12px;
+  background: #e5e7eb;
+  border-radius: 12px;
+  font-size: 12px;
+  color: #374151;
+  font-weight: 500;
+}
+
+.signed-pdfs-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.signed-pdfs-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.signed-pdfs-list::-webkit-scrollbar-track {
+  background: #f3f4f6;
+}
+
+.signed-pdfs-list::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+.signed-pdfs-list::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+.signed-pdf-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  gap: 12px;
+}
+
+.signed-pdf-item:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.signed-pdf-item.expired {
+  opacity: 0.6;
+  background: #fef3c7;
+}
+
+.signed-pdf-item.expired:hover {
+  background: #fef3c7;
+  border-color: #fcd34d;
+}
+
+.signed-pdf-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex: 1;
+  gap: 12px;
+}
+
+.signed-pdf-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.signed-pdf-icon {
+  color: #3b82f6;
+  flex-shrink: 0;
+}
+
+.signed-pdf-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.signed-pdf-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.signed-pdf-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.signed-pdf-timer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 2px solid currentColor;
+  border-radius: 6px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 90px;
+  animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.timer-label {
+  font-size: 10px;
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.timer-value {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Expiry Time Display */
+.signed-pdf-expiry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
+.signed-pdf-expiry.active {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.signed-pdf-expiry.expired {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.05);
+  opacity: 0.6;
+}
+
+.expiry-label {
+  font-size: 10px;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.expiry-time {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.signed-pdf-expiry.expired .expiry-time {
+  color: #ef4444;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.signed-pdf-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  background: #fee2e2;
+  color: #dc2626;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.signed-pdf-badge.active {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.signed-pdf-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.signed-pdf-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #6b7280;
+}
+
+.signed-pdf-btn-download {
+  background: #e0f2fe;
+  color: #0284c7;
+}
+.signed-pdf-btn-download:hover:not(:disabled) {
+  background: #0284c7;
+  color: white;
+}
+
+.signed-pdf-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.signed-pdfs-loader,
+.signed-pdfs-error {
+  padding: 40px 20px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.signed-pdfs-error {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+.signed-pdfs-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: #9ca3af;
+}
+
+.signed-pdfs-empty-icon {
+  margin-bottom: 16px;
+  color: #d1d5db;
+}
+
+.signed-pdfs-empty p {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.signed-pdfs-empty small {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .signed-pdf-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .signed-pdf-info {
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .signed-pdf-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

@@ -1,0 +1,194 @@
+.cached-container {
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.cached-loader {
+  text-align: center;
+  color: var(--gray-600);
+  padding: 20px;
+  font-size: 0.9375rem;
+}
+
+.cached-empty {
+  text-align: center;
+  padding: 40px 20px;
+  background: #f9fafb;
+  border-radius: 12px;
+  border: 1.5px dashed #e5e7eb;
+  color: var(--gray-600);
+}
+
+.cached-empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+}
+
+.cached-empty p {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  margin: 0 0 8px 0;
+  color: var(--gray-700);
+}
+
+.cached-empty small {
+  font-size: 0.8125rem;
+  color: var(--gray-500);
+}
+
+.cached-card {
+  background: var(--white);
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cached-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.cached-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--gray-900);
+  font-size: 0.9375rem;
+}
+
+.cached-status-icon {
+  color: #10b981;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.cached-hint {
+  color: var(--gray-500);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.cached-info {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.cached-filename {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.875rem;
+}
+
+.cached-label {
+  color: var(--gray-600);
+  font-weight: 500;
+}
+
+.cached-value {
+  color: var(--gray-900);
+  word-break: break-all;
+  font-family: 'Courier New', monospace;
+  font-size: 0.8125rem;
+}
+
+.cached-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.cached-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cached-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cached-btn-download {
+  background: #3b82f6;
+  color: var(--white);
+}
+
+.cached-btn-download:hover:not(:disabled) {
+  background: #2563eb;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.cached-btn-download:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.cached-btn-delete {
+  background: #f3f4f6;
+  color: var(--error);
+  border: 1.5px solid #fee;
+}
+
+.cached-btn-delete:hover:not(:disabled) {
+  background: #fee;
+  border-color: var(--error);
+}
+
+.cached-btn-delete:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+@media (max-width: 640px) {
+  .cached-container {
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  .cached-card {
+    padding: 12px;
+  }
+
+  .cached-actions {
+    flex-direction: column;
+  }
+
+  .cached-btn {
+    width: 100%;
+  }
+}

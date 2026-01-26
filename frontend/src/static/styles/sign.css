@@ -289,6 +289,7 @@
   z-index: 10;
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.2);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
 
@@ -407,4 +408,9 @@
     padding: 0.4rem 0.75rem;
     font-size: 0.8125rem;
   }
+}
+.cached-section-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #e5e7eb, transparent);
+  margin: 24px 0;
 }

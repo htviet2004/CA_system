@@ -104,6 +104,24 @@ export default function SignPDF({ onSign, username }) {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const handleViewSignedPdf = async () => {
+    // Tạo một Blob từ signedPdfUrl và tải nó như một file mới
+    try {
+      const response = await fetch(signedPdfUrl);
+      const blob = await response.blob();
+      // Tạo một File object từ blob
+      const file = new File([blob], 'signed_document.pdf', { type: 'application/pdf' });
+      
+      setSelectedFile(file);
+      setPreviewUrl(signedPdfUrl);
+      setSignedPdfUrl(null);
+      setSignatureArea(null);
+    } catch (err) {
+      console.error('Error viewing signed PDF:', err);
+      alert('Lỗi khi tải PDF đã ký');
+    }
+  };
+
   return (
     <div className="sign-card">
       <div className="card-header">
@@ -117,6 +135,7 @@ export default function SignPDF({ onSign, username }) {
           <span>Vui lòng đăng nhập để sử dụng chức năng ký số</span>
         </div>
       ) : (
+        <>
         <form onSubmit={handleSubmit}>
           <div
             className={`upload-zone ${isDragging ? 'dragging' : ''} ${selectedFile ? 'has-file' : ''}`}
@@ -287,17 +306,36 @@ export default function SignPDF({ onSign, username }) {
                   showSelection={false}
                 />
               </div>
-              <button 
-                type="button" 
-                className="btn btn-success btn-block"
-                onClick={handleDownload}
-              >
-                <Download size={18} />
-                Tải xuống PDF đã ký
-              </button>
+              <div className="button-group">
+                <button 
+                  type="button" 
+                  className="btn btn-success btn-block"
+                  onClick={handleDownload}
+                >
+                  <Download size={18} />
+                  Tải xuống PDF đã ký
+                </button>
+              </div>
             </>
           )}
         </form>
+
+        <div className="cached-section-divider"></div>
+        
+        {signedPdfUrl && (
+          <div className="signed-actions">
+            <button
+              type="button"
+              className="btn btn-info btn-block"
+              onClick={handleViewSignedPdf}
+            >
+              <FileSignature size={18} />
+              Xem lại và ký thêm PDF
+            </button>
+          </div>
+        )}
+
+        </>
       )}
     </div>
   );

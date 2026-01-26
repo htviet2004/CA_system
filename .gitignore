@@ -26,3 +26,6 @@ staticfiles/
 .idea/
 .DS_Store
 user_test
+
+# Files
+backend/signing/pdf_achiever/

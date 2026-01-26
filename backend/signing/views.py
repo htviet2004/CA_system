@@ -3,6 +3,7 @@ from django.conf import settings
 from django.http import JsonResponse, FileResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate
+from django.utils import timezone
 import tempfile
 import os
 import traceback
@@ -11,6 +12,7 @@ from .certificate_service import CertificateService
 from .pdf_signer import PDFSigner
 from .pdf_verifier import PDFVerifier
 from .pdf_stamp import PDFStampService
+from .cache_manager import signed_pdf_cache
 from .utils import find_pyhanko_executable
 from datetime import datetime
 from usermanage.models import UserProfile
@@ -147,6 +149,22 @@ def sign_file(request):
                 raise ValueError('Signed PDF is empty')
             
             print(f"[SIGN] Output file validated: {os.path.getsize(out_path)} bytes")
+            
+            # Lưu vào cache (metadata + file)
+            signer_name = text_config.get('signer_name', '')
+            title = text_config.get('title', '')
+            custom_text = text_config.get('custom_text', '')
+            
+            signed_pdf_cache.save(
+                user=user,
+                pdf_path=out_path,
+                original_filename=uploaded.name or 'signed.pdf',
+                signer_name=signer_name,
+                title=title,
+                custom_text=custom_text,
+                reason=reason,
+                location=location
+            )
             
             resp = FileResponse(
                 open(out_path, 'rb'),
@@ -308,15 +326,178 @@ def get_pdf_info(request):
             pass
 
 
+@csrf_exempt
+def get_cached_pdf(request):
+    """
+    Lấy PDF đã ký từ cache theo ID
+    
+    GET /api/sign/cached-pdf/?pdf_id=<pdf_id>
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'GET only'}, status=405)
+    
+    user = _authenticate_user(request)
+    if not user:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    
+    pdf_id = request.GET.get('pdf_id')
+    if not pdf_id:
+        return JsonResponse({'error': 'Missing pdf_id parameter'}, status=400)
+    
+    try:
+        pdf_path, filename = signed_pdf_cache.get_pdf_file(user, pdf_id)
+        
+        if not pdf_path:
+            return JsonResponse({
+                'error': 'PDF not found or access denied',
+                'available': False
+            }, status=404)
+        
+        # Mở file nhưng KHÔNG dùng with context manager
+        # vì FileResponse cần file vẫn mở để đọc dữ liệu
+        f = open(pdf_path, 'rb')
+        response = FileResponse(
+            f,
+            as_attachment=True,
+            filename=filename
+        )
+        # Django sẽ tự đóng file sau khi ghi response xong
+        return response
+    except Exception as e:
+        print(f"[ERROR] Error serving cached PDF for {user.username}: {e}")
+        return JsonResponse({
+            'error': 'Error reading cached PDF',
+            'available': False
+        }, status=500)
+
+
+@csrf_exempt
+def check_cached_pdf(request):
+    """
+    Lấy danh sách PDF đang cached (chưa hết hạn) của user
+    
+    GET /api/sign/check-cache/
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'GET only'}, status=405)
+    
+    user = _authenticate_user(request)
+    if not user:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    
+    active_pdfs = signed_pdf_cache.get_active_pdfs(user)
+    from datetime import datetime
+    
+    pdfs_response = []
+    for pdf in active_pdfs:
+        # So sánh aware datetime với aware datetime
+        elapsed = (timezone.now() - pdf.created_at).total_seconds()
+        remaining = max(0, 3600 - int(elapsed))
+        print(f"[API DEBUG] check_cached_pdf - {pdf.pdf_id}, created_at: {pdf.created_at}, now: {timezone.now()}, elapsed: {elapsed}s, remaining: {remaining}s")
+        pdfs_response.append({
+            'pdf_id': pdf.pdf_id,
+            'filename': pdf.filename,
+            'signed_at': pdf.signed_at.isoformat(),
+            'created_at': pdf.created_at.isoformat(),
+            'remaining_seconds': remaining
+        })
+    
+    return JsonResponse({
+        'available': len(active_pdfs) > 0,
+        'count': len(active_pdfs),
+        'pdfs': pdfs_response
+    })
+
+
+@csrf_exempt
+def clear_cached_pdf(request):
+    """
+    Xóa toàn bộ PDF cached của user
+    
+    POST /api/sign/clear-cache/
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST only'}, status=405)
+    
+    user = _authenticate_user(request)
+    if not user:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    
+    signed_pdf_cache.delete_all(user)
+    
+    return JsonResponse({'success': True, 'message': 'All cached PDFs cleared'})
+
+
+@csrf_exempt
+def verify_cache_status(request):
+    """
+    Verify cache status: check TTL + file existence + cleanup expired
+    
+    GET /api/sign/verify-cache-status/
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'GET only'}, status=405)
+    
+    user = _authenticate_user(request)
+    if not user:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    
+    stats = signed_pdf_cache.verify_cache_status(user)
+    
+    return JsonResponse({
+        'success': True,
+        'stats': stats,
+        'message': f"Cache status: {stats['active']} còn hạn, {stats['expired_ttl']} hết thời gian, {stats['file_missing']} mất file"
+    })
+
+
+@csrf_exempt
+def get_signed_pdfs_log(request):
+    """
+    Lấy toàn bộ log PDF đã ký của user (bao gồm đã hết hạn)
+    
+    GET /api/sign/signed-pdfs-log/
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'GET only'}, status=405)
+    
+    user = _authenticate_user(request)
+    if not user:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    
+    all_pdfs = signed_pdf_cache.get_all_pdfs_log(user)
+    
+    pdfs_response = []
+    for pdf in all_pdfs:
+        # So sánh aware datetime với aware datetime
+        elapsed = (timezone.now() - pdf.created_at).total_seconds()
+        remaining = max(0, 3600 - int(elapsed))
+        print(f"[API DEBUG] get_signed_pdfs_log - {pdf.pdf_id}, created_at: {pdf.created_at}, now: {timezone.now()}, elapsed: {elapsed}s, remaining: {remaining}s, is_cached: {pdf.is_cached}")
+        pdfs_response.append({
+            'pdf_id': pdf.pdf_id,
+            'filename': pdf.filename,
+            'signed_at': pdf.signed_at.isoformat(),
+            'created_at': pdf.created_at.isoformat(),
+            'is_cached': pdf.is_cached,
+            'remaining_seconds': remaining
+        })
+    
+    return JsonResponse({
+        'count': len(all_pdfs),
+        'pdfs': pdfs_response
+    })
+
+
 def _authenticate_user(request):
     
     if hasattr(request, 'user') and request.user.is_authenticated:
         return request.user
     
-    username = request.POST.get('username')
-    password = request.POST.get('password')
+    username = request.POST.get('username') or request.GET.get('username')
+    password = request.POST.get('password') or request.GET.get('password')
     
     if username and password:
+
         return authenticate(username=username, password=password)
     
     return None
