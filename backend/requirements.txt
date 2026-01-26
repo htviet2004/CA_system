@@ -1,6 +1,8 @@
 django
 django-extensions
-crpyptography
+cryptography
 pyhanko
 reportlab
 pypdf
+mysqlclient
+python-dotenv
