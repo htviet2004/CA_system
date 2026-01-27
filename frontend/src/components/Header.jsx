@@ -19,8 +19,7 @@ export default function Header({
   user,
   onAuthClick,
   onLogout,
-  certificateInfo,
-  signingStats
+  certificateInfo
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -65,7 +64,6 @@ export default function Header({
               user={user}
               onLogout={onLogout}
               certificateInfo={certificateInfo}
-              signingStats={signingStats}
             />
           ) : (
             <button className="btn-login" onClick={onAuthClick}>

@@ -7,15 +7,13 @@ import {
   XCircle,
   AlertTriangle,
   Clock,
-  Download,
   RefreshCw,
   Calendar,
   Key,
-  FileKey,
   Award,
   Info
 } from 'lucide-react';
-import { getCertificateInfo, downloadCertificate, renewCertificate } from '../api';
+import { getCertificateInfo, renewCertificate } from '../api';
 import '../static/styles/certificate-manager.css';
 
 /**
@@ -25,7 +23,6 @@ import '../static/styles/certificate-manager.css';
  * - Current certificate status
  * - Expiration date and days remaining
  * - Certificate details (CN, serial, issuer)
- * - Download options (P12, PEM)
  * - Renewal option (if near expiration)
  */
 export default function CertificateManager({ username }) {
@@ -33,7 +30,6 @@ export default function CertificateManager({ username }) {
   const [certInfo, setCertInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [downloadLoading, setDownloadLoading] = useState(false);
   const [renewLoading, setRenewLoading] = useState(false);
   const [message, setMessage] = useState(null);
 
@@ -51,29 +47,6 @@ export default function CertificateManager({ username }) {
       setError('Không thể tải thông tin chứng chỉ: ' + (err.message || err));
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleDownload = async (format) => {
-    try {
-      setDownloadLoading(true);
-      const blob = await downloadCertificate(format);
-      
-      // Create download link
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `certificate.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      
-      setMessage({ type: 'success', text: 'Tải chứng chỉ thành công!' });
-    } catch (err) {
-      setMessage({ type: 'error', text: 'Lỗi tải chứng chỉ: ' + (err.message || err) });
-    } finally {
-      setDownloadLoading(false);
     }
   };
 
@@ -98,7 +71,7 @@ export default function CertificateManager({ username }) {
   const getStatusDisplay = () => {
     if (!certInfo) return null;
 
-    const { status, daysUntilExpiry } = certInfo;
+    const { status, days_remaining } = certInfo;
 
     if (status === 'revoked') {
       return {
@@ -118,11 +91,11 @@ export default function CertificateManager({ username }) {
         canRenew: true
       };
     }
-    if (daysUntilExpiry !== null && daysUntilExpiry <= 30) {
+    if (days_remaining !== null && days_remaining <= 30) {
       return {
         icon: AlertTriangle,
         text: 'Sắp hết hạn',
-        description: `Chứng chỉ sẽ hết hạn trong ${daysUntilExpiry} ngày.`,
+        description: `Chứng chỉ sẽ hết hạn trong ${days_remaining} ngày.`,
         className: 'status-warning',
         canRenew: true
       };
@@ -133,7 +106,7 @@ export default function CertificateManager({ username }) {
         text: 'Hợp lệ',
         description: 'Chứng chỉ đang hoạt động bình thường.',
         className: 'status-valid',
-        canRenew: daysUntilExpiry !== null && daysUntilExpiry <= 60
+        canRenew: days_remaining !== null && days_remaining <= 60
       };
     }
     return {
@@ -158,6 +131,15 @@ export default function CertificateManager({ username }) {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  // Get expiration class for visual indication
+  const getExpirationClass = (daysRemaining) => {
+    if (daysRemaining === null || daysRemaining === undefined) return '';
+    if (daysRemaining <= 0) return 'expired';
+    if (daysRemaining <= 30) return 'expiring-soon';
+    if (daysRemaining <= 60) return 'expiring-warning';
+    return 'valid';
   };
 
   return (
@@ -195,7 +177,7 @@ export default function CertificateManager({ username }) {
           <p>{error}</p>
           <button onClick={loadCertificateInfo}>Thử lại</button>
         </div>
-      ) : !certInfo?.hasCertificate ? (
+      ) : !certInfo?.has_certificate ? (
         <div className="no-cert-state">
           <FileKey size={48} />
           <h3>Chưa có chứng chỉ</h3>
@@ -232,7 +214,7 @@ export default function CertificateManager({ username }) {
               </div>
               <div className="detail-content">
                 <span className="detail-label">Tên chủ thể (CN)</span>
-                <span className="detail-value">{certInfo.commonName || '-'}</span>
+                <span className="detail-value">{certInfo.common_name || '-'}</span>
               </div>
             </div>
 
@@ -242,7 +224,7 @@ export default function CertificateManager({ username }) {
               </div>
               <div className="detail-content">
                 <span className="detail-label">Số sê-ri</span>
-                <span className="detail-value mono">{certInfo.serialNumber || '-'}</span>
+                <span className="detail-value mono">{certInfo.serial_number || '-'}</span>
               </div>
             </div>
 
@@ -262,70 +244,37 @@ export default function CertificateManager({ username }) {
               </div>
               <div className="detail-content">
                 <span className="detail-label">Ngày cấp</span>
-                <span className="detail-value">{formatDate(certInfo.createdAt)}</span>
+                <span className="detail-value">{formatDate(certInfo.created_at)}</span>
               </div>
             </div>
 
             <div className="detail-card">
+              <div className="detail-icon">
+                <Calendar size={24} />
+              </div>
+              <div className="detail-content">
+                <span className="detail-label">Có hiệu lực từ</span>
+                <span className="detail-value">{formatDate(certInfo.valid_from)}</span>
+              </div>
+            </div>
+
+            <div className="detail-card expiration-card">
               <div className="detail-icon">
                 <Clock size={24} />
               </div>
               <div className="detail-content">
                 <span className="detail-label">Ngày hết hạn</span>
-                <span className="detail-value">{formatDate(certInfo.expiresAt)}</span>
-              </div>
-            </div>
-
-            <div className="detail-card">
-              <div className="detail-icon">
-                <Info size={24} />
-              </div>
-              <div className="detail-content">
-                <span className="detail-label">Thời gian còn lại</span>
-                <span className="detail-value">
-                  {certInfo.daysUntilExpiry !== null 
-                    ? `${certInfo.daysUntilExpiry} ngày`
-                    : '-'
-                  }
+                <span className={`detail-value ${getExpirationClass(certInfo.days_remaining)}`}>
+                  {formatDate(certInfo.expires_at)}
+                  {certInfo.days_remaining !== null && (
+                    <span className="days-badge">
+                      {certInfo.days_remaining <= 0 
+                        ? 'Đã hết hạn' 
+                        : `Còn ${certInfo.days_remaining} ngày`}
+                    </span>
+                  )}
                 </span>
               </div>
-            </div>
-          </div>
-
-          {/* Download Section */}
-          <div className="download-section">
-            <h3>
-              <Download size={20} />
-              Tải chứng chỉ
-            </h3>
-            <div className="download-options">
-              <button 
-                className="download-btn"
-                onClick={() => handleDownload('p12')}
-                disabled={downloadLoading}
-              >
-                <FileKey size={20} />
-                <span>PKCS#12 (.p12)</span>
-                <small>Chứa khóa riêng tư</small>
-              </button>
-              <button 
-                className="download-btn"
-                onClick={() => handleDownload('pem')}
-                disabled={downloadLoading}
-              >
-                <FileKey size={20} />
-                <span>PEM Certificate</span>
-                <small>Chỉ chứng chỉ công khai</small>
-              </button>
-              <button 
-                className="download-btn"
-                onClick={() => handleDownload('chain')}
-                disabled={downloadLoading}
-              >
-                <Shield size={20} />
-                <span>Certificate Chain</span>
-                <small>Bao gồm CA chain</small>
-              </button>
             </div>
           </div>
 

@@ -24,4 +24,9 @@ urlpatterns = [
     path('signing-stats/', views.get_signing_stats, name='signing_stats'),
     path('download/', views.download_certificate, name='download_certificate'),
     path('renew/', views.renew_certificate, name='renew_certificate'),
+    
+    # Admin-only certificate management
+    path('admin/reissue/<int:user_id>/', views.admin_reissue_certificate, name='admin_reissue_certificate'),
+    path('admin/force-renew/<int:cert_id>/', views.admin_force_renew, name='admin_force_renew'),
+    path('admin/all-certificates/', views.admin_list_all_certificates, name='admin_list_all_certificates'),
 ]

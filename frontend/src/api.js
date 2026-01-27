@@ -215,7 +215,7 @@ export async function getSigningHistory(page = 1, limit = 50) {
 export async function getSignedDocuments(page = 1, perPage = 20, filters = {}) {
   const params = new URLSearchParams({
     page: page.toString(),
-    per_page: perPage.toString()
+    limit: perPage.toString()
   })
   
   if (filters.status) params.append('status', filters.status)
@@ -361,75 +361,162 @@ export async function changePassword(currentPassword, newPassword) {
   return res.json()
 }
 
-// =============================================================================
-// ADMIN API
-// =============================================================================
-
 /**
- * Admin Dashboard Stats
+ * ADMIN-ONLY CERTIFICATE MANAGEMENT
+ * These functions require admin privileges
  */
-export async function getAdminDashboardStats() {
-  const res = await fetch('/api/usermanage/admin/stats/', {
+
+export async function adminListAllCertificates(filters = {}) {
+  const params = new URLSearchParams()
+  if (filters.status) params.append('status', filters.status)
+  if (filters.username) params.append('username', filters.username)
+  
+  const res = await fetch(`/api/usercerts/admin/all-certificates/?${params}`, {
     method: 'GET',
     credentials: 'include'
   })
   if (!res.ok) {
-    if (res.status === 403) throw new Error('Admin access required')
-    throw new Error('Failed to fetch admin stats')
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+// Alias for AdminCertificatesTab component compatibility
+export async function getAdminCertificates(params = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.page) searchParams.append('page', params.page.toString())
+  if (params.per_page) searchParams.append('per_page', params.per_page.toString())
+  if (params.search) searchParams.append('username', params.search)
+  if (params.status) searchParams.append('status', params.status)
+  
+  const res = await fetch(`/api/usercerts/admin/all-certificates/?${searchParams}`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  const data = await res.json()
+  // Transform response to match expected format
+  return {
+    certificates: data.certificates || [],
+    pagination: {
+      total: data.total_count || 0,
+      total_pages: Math.ceil((data.total_count || 0) / (params.per_page || 10))
+    }
+  }
+}
+
+export async function adminReissueCertificate(userId, reason = '', notes = '') {
+  const fd = new FormData()
+  fd.append('reason', reason)
+  fd.append('notes', notes)
+  
+  const res = await fetch(`/api/usercerts/admin/reissue/${userId}/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRFToken': getCsrf() },
+    body: fd
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+export async function adminForceRenewCertificate(certId, reason = '', notes = '') {
+  const fd = new FormData()
+  fd.append('reason', reason)
+  fd.append('notes', notes)
+  
+  const res = await fetch(`/api/usercerts/admin/force-renew/${certId}/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRFToken': getCsrf() },
+    body: fd
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+// Alias for AdminCertificatesTab compatibility
+export async function adminRenewCertificate(certId, reason = '', notes = '') {
+  return adminForceRenewCertificate(certId, reason, notes)
+}
+
+export async function adminRevokeCertificate(certId, reason = 'unspecified') {
+  const fd = new FormData()
+  fd.append('reason', reason)
+  
+  const res = await fetch(`/api/usercerts/revoke/${certId}/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRFToken': getCsrf() },
+    body: fd
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
   }
   return res.json()
 }
 
 /**
- * Admin Meta (roles, departments, etc.)
+ * ADMIN STATS API
  */
-export async function getAdminMeta() {
-  const res = await fetch('/api/usermanage/admin/meta/', {
+export async function getAdminStats() {
+  const res = await fetch('/api/usermanage/admin/stats/', {
     method: 'GET',
     credentials: 'include'
   })
-  if (!res.ok) throw new Error('Failed to fetch admin meta')
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
   return res.json()
 }
 
 /**
- * Admin User Management
+ * ADMIN USER MANAGEMENT API
  */
-export async function adminListUsers(params = {}) {
+export async function getAdminUsers(params = {}) {
   const searchParams = new URLSearchParams()
-  if (params.page) searchParams.append('page', params.page)
-  if (params.per_page) searchParams.append('per_page', params.per_page)
+  if (params.page) searchParams.append('page', params.page.toString())
+  if (params.per_page) searchParams.append('per_page', params.per_page.toString())
   if (params.search) searchParams.append('search', params.search)
-  if (params.is_active !== undefined) searchParams.append('is_active', params.is_active)
-  if (params.is_staff !== undefined) searchParams.append('is_staff', params.is_staff)
+  if (params.status) searchParams.append('status', params.status)
   if (params.role) searchParams.append('role', params.role)
-  if (params.department) searchParams.append('department', params.department)
-  if (params.sort) searchParams.append('sort', params.sort)
   
   const res = await fetch(`/api/usermanage/admin/users/?${searchParams}`, {
     method: 'GET',
     credentials: 'include'
   })
   if (!res.ok) {
-    if (res.status === 403) throw new Error('Admin access required')
-    throw new Error('Failed to fetch users')
+    const txt = await res.text()
+    throw new Error(txt)
   }
   return res.json()
 }
 
-export async function adminGetUser(userId) {
+export async function getAdminUser(userId) {
   const res = await fetch(`/api/usermanage/admin/users/${userId}/`, {
     method: 'GET',
     credentials: 'include'
   })
   if (!res.ok) {
-    if (res.status === 404) throw new Error('User not found')
-    throw new Error('Failed to fetch user')
+    const txt = await res.text()
+    throw new Error(txt)
   }
   return res.json()
 }
 
-export async function adminCreateUser(userData) {
+export async function createAdminUser(userData) {
   const res = await fetch('/api/usermanage/admin/users/create/', {
     method: 'POST',
     credentials: 'include',
@@ -440,15 +527,15 @@ export async function adminCreateUser(userData) {
     body: JSON.stringify(userData)
   })
   if (!res.ok) {
-    const data = await res.json().catch(() => ({ error: 'Failed to create user' }))
-    throw new Error(data.error || 'Failed to create user')
+    const txt = await res.text()
+    throw new Error(txt)
   }
   return res.json()
 }
 
-export async function adminUpdateUser(userId, userData) {
+export async function updateAdminUser(userId, userData) {
   const res = await fetch(`/api/usermanage/admin/users/${userId}/update/`, {
-    method: 'PUT',
+    method: 'POST',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
@@ -457,115 +544,65 @@ export async function adminUpdateUser(userId, userData) {
     body: JSON.stringify(userData)
   })
   if (!res.ok) {
-    const data = await res.json().catch(() => ({ error: 'Failed to update user' }))
-    throw new Error(data.error || 'Failed to update user')
+    const txt = await res.text()
+    throw new Error(txt)
   }
   return res.json()
 }
 
-export async function adminDeleteUser(userId, hardDelete = false) {
-  const params = hardDelete ? '?hard=true' : ''
-  const res = await fetch(`/api/usermanage/admin/users/${userId}/delete/${params}`, {
-    method: 'DELETE',
-    credentials: 'include',
-    headers: {
-      'X-CSRFToken': getCsrf()
-    }
-  })
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({ error: 'Failed to delete user' }))
-    throw new Error(data.error || 'Failed to delete user')
-  }
-  return res.json()
-}
-
-export async function adminResetUserPassword(userId) {
-  const res = await fetch(`/api/usermanage/admin/users/${userId}/reset-password/`, {
+export async function deleteAdminUser(userId) {
+  const res = await fetch(`/api/usermanage/admin/users/${userId}/delete/`, {
     method: 'POST',
     credentials: 'include',
-    headers: {
-      'X-CSRFToken': getCsrf()
-    }
+    headers: { 'X-CSRFToken': getCsrf() }
   })
   if (!res.ok) {
-    const data = await res.json().catch(() => ({ error: 'Failed to reset password' }))
-    throw new Error(data.error || 'Failed to reset password')
+    const txt = await res.text()
+    throw new Error(txt)
   }
   return res.json()
 }
 
-/**
- * Admin Certificate Management
- */
-export async function adminListCertificates(params = {}) {
-  const searchParams = new URLSearchParams()
-  if (params.page) searchParams.append('page', params.page)
-  if (params.per_page) searchParams.append('per_page', params.per_page)
-  if (params.search) searchParams.append('search', params.search)
-  if (params.status) searchParams.append('status', params.status)
-  if (params.user_id) searchParams.append('user_id', params.user_id)
-  
-  const res = await fetch(`/api/usermanage/admin/certificates/?${searchParams}`, {
-    method: 'GET',
-    credentials: 'include'
-  })
-  if (!res.ok) throw new Error('Failed to fetch certificates')
-  return res.json()
+export async function getAdminMeta() {
+  // Use existing meta endpoint
+  return fetchAllMeta()
 }
 
 /**
- * Admin Signing History Management
+ * ADMIN SIGNING HISTORY API
  */
-export async function adminListSigningHistory(params = {}) {
+export async function getAdminSigningHistory(params = {}) {
   const searchParams = new URLSearchParams()
-  if (params.page) searchParams.append('page', params.page)
-  if (params.per_page) searchParams.append('per_page', params.per_page)
+  if (params.page) searchParams.append('page', params.page.toString())
+  if (params.per_page) searchParams.append('per_page', params.per_page.toString())
   if (params.search) searchParams.append('search', params.search)
   if (params.status) searchParams.append('status', params.status)
-  if (params.user_id) searchParams.append('user_id', params.user_id)
-  if (params.date_from) searchParams.append('date_from', params.date_from)
-  if (params.date_to) searchParams.append('date_to', params.date_to)
+  if (params.username) searchParams.append('username', params.username)
   
   const res = await fetch(`/api/usermanage/admin/signing-history/?${searchParams}`, {
     method: 'GET',
     credentials: 'include'
   })
-  if (!res.ok) throw new Error('Failed to fetch signing history')
-  return res.json()
-}
-
-export async function adminRevokeSignature(historyId) {
-  const res = await fetch(`/api/usermanage/admin/signing-history/${historyId}/revoke/`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'X-CSRFToken': getCsrf()
-    }
-  })
   if (!res.ok) {
-    const data = await res.json().catch(() => ({ error: 'Failed to revoke signature' }))
-    throw new Error(data.error || 'Failed to revoke signature')
+    const txt = await res.text()
+    throw new Error(txt)
   }
   return res.json()
 }
 
-/**
- * Admin Certificate Revocation
- */
-export async function adminRevokeCertificate(certId, reason = 'unspecified') {
-  const res = await fetch(`/api/usermanage/admin/certificates/${certId}/revoke/`, {
+export async function adminRevokeSignature(signatureId, reason = '') {
+  const fd = new FormData()
+  fd.append('reason', reason)
+  
+  const res = await fetch(`/api/usercerts/history/${signatureId}/revoke/`, {
     method: 'POST',
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': getCsrf()
-    },
-    body: JSON.stringify({ reason })
+    headers: { 'X-CSRFToken': getCsrf() },
+    body: fd
   })
   if (!res.ok) {
-    const data = await res.json().catch(() => ({ error: 'Failed to revoke certificate' }))
-    throw new Error(data.error || 'Failed to revoke certificate')
+    const txt = await res.text()
+    throw new Error(txt)
   }
   return res.json()
 }
-

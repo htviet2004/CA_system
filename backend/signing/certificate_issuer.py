@@ -10,12 +10,14 @@ Key security features:
 - Password passing via stdin to OpenSSL (not command line)
 - Secure deletion of private keys after P12 export
 - Username validation to prevent path traversal
+- Certificate validity extraction for database tracking
 """
 import os
 import subprocess
 import secrets
 import logging
 from pathlib import Path
+from datetime import datetime, timezone
 
 from django.conf import settings
 
@@ -109,6 +111,9 @@ class CertificateIssuer:
                 - ok: bool
                 - p12_enc_path: str (relative to BASE_DIR)
                 - p12_pass_enc_path: str (relative to BASE_DIR)
+                - serial_number: str (certificate serial number)
+                - valid_from: datetime (certificate validity start)
+                - expires_at: datetime (certificate expiration)
                 - error: str (if ok=False)
         
         SECURITY:
@@ -197,6 +202,9 @@ extendedKeyUsage = emailProtection, clientAuth
                 capture_output=True
             )
             
+            # Extract certificate validity dates and serial number
+            cert_info = self._extract_cert_info(crt_path)
+            
             # Step 4: Export to PKCS#12 (passphrase via stdin)
             logger.debug(f"Exporting PKCS#12 for {username}")
             result = subprocess.run(
@@ -232,6 +240,9 @@ extendedKeyUsage = emailProtection, clientAuth
                 'ok': True,
                 'p12_enc_path': str(p12_enc_path.relative_to(self.project_root)),
                 'p12_pass_enc_path': str(pass_enc_path.relative_to(self.project_root)),
+                'serial_number': cert_info.get('serial_number', ''),
+                'valid_from': cert_info.get('valid_from'),
+                'expires_at': cert_info.get('expires_at'),
             }
             
         except subprocess.CalledProcessError as e:
@@ -283,6 +294,78 @@ extendedKeyUsage = emailProtection, clientAuth
                 filepath.unlink()
             except Exception as e:
                 logger.warning(f"Failed to delete {filepath}: {e}")
+    
+    def _extract_cert_info(self, cert_path):
+        """
+        Extract certificate information including validity dates and serial number.
+        
+        Args:
+            cert_path: Path to the certificate file
+            
+        Returns:
+            dict with serial_number, valid_from, expires_at
+        """
+        info = {
+            'serial_number': '',
+            'valid_from': None,
+            'expires_at': None
+        }
+        
+        try:
+            # Get certificate dates using openssl
+            result = subprocess.run(
+                ['openssl', 'x509', '-in', str(cert_path), '-noout', '-dates', '-serial'],
+                capture_output=True,
+                text=True
+            )
+            
+            if result.returncode == 0:
+                output = result.stdout
+                
+                # Parse dates and serial from output
+                for line in output.strip().split('\n'):
+                    line = line.strip()
+                    if line.startswith('notBefore='):
+                        date_str = line.replace('notBefore=', '')
+                        info['valid_from'] = self._parse_openssl_date(date_str)
+                    elif line.startswith('notAfter='):
+                        date_str = line.replace('notAfter=', '')
+                        info['expires_at'] = self._parse_openssl_date(date_str)
+                    elif line.startswith('serial='):
+                        info['serial_number'] = line.replace('serial=', '').strip()
+                        
+        except Exception as e:
+            logger.warning(f"Failed to extract certificate info: {e}")
+        
+        return info
+    
+    def _parse_openssl_date(self, date_str):
+        """
+        Parse OpenSSL date format to datetime.
+        
+        OpenSSL date format: 'Jan 27 00:00:00 2026 GMT'
+        """
+        try:
+            # Try common OpenSSL date formats
+            formats = [
+                '%b %d %H:%M:%S %Y %Z',
+                '%b  %d %H:%M:%S %Y %Z',  # Extra space for single-digit days
+            ]
+            
+            for fmt in formats:
+                try:
+                    dt = datetime.strptime(date_str.strip(), fmt)
+                    # Make timezone aware (UTC)
+                    return dt.replace(tzinfo=timezone.utc)
+                except ValueError:
+                    continue
+            
+            logger.warning(f"Could not parse date: {date_str}")
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Date parsing error: {e}")
+            return None
 
 
 # Singleton instance for convenience

@@ -5,7 +5,8 @@ __pycache__/
 *.log
 db.sqlite3
 backend/venv/
-
+backend/signed_documents/
+users/
 # Env
 .env
 .env.*

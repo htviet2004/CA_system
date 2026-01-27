@@ -130,9 +130,12 @@ def issue_cert(request):
     
     uc = UserCert.objects.create(
         user=user, 
-        common_name=cn, 
+        common_name=cn,
+        serial_number=result.get('serial_number', ''),
         p12_enc_path=result.get('p12_enc_path', ''), 
-        p12_pass_enc_path=result.get('p12_pass_enc_path', '')
+        p12_pass_enc_path=result.get('p12_pass_enc_path', ''),
+        valid_from=result.get('valid_from'),
+        expires_at=result.get('expires_at')
     )
     logger.info(f"Certificate issued for user: {username}")
     
@@ -519,28 +522,11 @@ def get_certificate_info(request):
             'message': 'No active certificate found'
         })
     
-    # Calculate certificate status
-    now = timezone.now()
+    # Try to extract certificate info from file if not in database
+    valid_from = cert.valid_from
     expires_at = cert.expires_at
-    
-    if not cert.active:
-        status = 'revoked'
-        days_remaining = 0
-    elif expires_at and expires_at < now:
-        status = 'expired'
-        days_remaining = 0
-    elif expires_at:
-        days_remaining = (expires_at - now).days
-        if days_remaining <= 30:
-            status = 'warning'  # Expiring soon
-        else:
-            status = 'valid'
-    else:
-        status = 'valid'
-        days_remaining = None
-    
-    # Get certificate fingerprint from file if available
     fingerprint = None
+    
     try:
         from cryptography import x509
         from cryptography.hazmat.primitives import serialization
@@ -559,22 +545,65 @@ def get_certificate_info(request):
                 p12_data, password, default_backend()
             )
             if certificate:
+                # Get fingerprint
                 cert_der = certificate.public_bytes(serialization.Encoding.DER)
                 fingerprint = hashlib.sha256(cert_der).hexdigest().upper()
                 fingerprint = ':'.join(fingerprint[i:i+2] for i in range(0, len(fingerprint), 2))
+                
+                # Extract validity dates if not in database
+                if not valid_from:
+                    valid_from = certificate.not_valid_before_utc
+                if not expires_at:
+                    expires_at = certificate.not_valid_after_utc
+                
+                # Update database if we extracted new info
+                updated = False
+                if not cert.valid_from and valid_from:
+                    cert.valid_from = valid_from
+                    updated = True
+                if not cert.expires_at and expires_at:
+                    cert.expires_at = expires_at
+                    updated = True
+                if not cert.serial_number and certificate.serial_number:
+                    cert.serial_number = format(certificate.serial_number, 'X')
+                    updated = True
+                if updated:
+                    cert.save()
+                    logger.info(f"Updated certificate info for user {user.username}")
+                    
     except Exception as e:
-        logger.debug(f"Could not get certificate fingerprint: {e}")
+        logger.debug(f"Could not extract certificate info: {e}")
+    
+    # Calculate certificate status
+    now = timezone.now()
+    
+    if not cert.active:
+        status = 'revoked'
+        days_remaining = 0
+    elif expires_at and expires_at < now:
+        status = 'expired'
+        days_remaining = 0
+    elif expires_at:
+        days_remaining = (expires_at - now).days
+        if days_remaining <= 30:
+            status = 'warning'  # Expiring soon
+        else:
+            status = 'valid'
+    else:
+        status = 'valid'
+        days_remaining = None
     
     return JsonResponse({
         'has_certificate': True,
         'id': cert.id,
         'common_name': cert.common_name,
         'serial_number': cert.serial_number,
-        'issuer': 'CA System Intermediate CA',  # Could be extracted from cert
+        'issuer': 'CA System Intermediate CA',
         'status': status,
         'days_remaining': days_remaining,
         'created_at': cert.created_at.isoformat(),
-        'expires_at': cert.expires_at.isoformat() if cert.expires_at else None,
+        'valid_from': valid_from.isoformat() if valid_from else None,
+        'expires_at': expires_at.isoformat() if expires_at else None,
         'revoked_at': cert.revoked_at.isoformat() if cert.revoked_at else None,
         'revocation_reason': cert.revocation_reason,
         'fingerprint': fingerprint
@@ -745,8 +774,11 @@ def renew_certificate(request):
     new_cert = UserCert.objects.create(
         user=user,
         common_name=old_cert.common_name,
+        serial_number=result.get('serial_number', ''),
         p12_enc_path=result.get('p12_enc_path', ''),
-        p12_pass_enc_path=result.get('p12_pass_enc_path', '')
+        p12_pass_enc_path=result.get('p12_pass_enc_path', ''),
+        valid_from=result.get('valid_from'),
+        expires_at=result.get('expires_at')
     )
     
     logger.info(f"Certificate renewed for user: {user.username}")
@@ -757,3 +789,203 @@ def renew_certificate(request):
         'new_cert_id': new_cert.id,
         'old_cert_revoked': True
     })
+
+
+# ============================================================================
+# ADMIN-ONLY CERTIFICATE MANAGEMENT APIs
+# ============================================================================
+
+@login_required
+@require_http_methods(["POST"])
+def admin_reissue_certificate(request, user_id):
+    """
+    Admin-only: Force re-issue a certificate for any user.
+    
+    This bypasses the normal renewal restrictions and creates a new certificate
+    immediately, revoking any existing active certificates.
+    
+    SECURITY: Requires admin privileges. All actions are logged.
+    """
+    if not request.user.is_staff:
+        logger.warning(f"Non-admin user {request.user.username} attempted to use admin_reissue_certificate")
+        return JsonResponse({'error': 'Admin access required'}, status=403)
+    
+    from signing.certificate_issuer import issue_user_certificate
+    
+    try:
+        target_user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=404)
+    
+    reason = request.POST.get('reason', 'admin_reissue')
+    notes = request.POST.get('notes', '')
+    
+    # Get and revoke all active certificates for this user
+    active_certs = UserCert.objects.filter(user=target_user, active=True)
+    revoked_count = 0
+    for cert in active_certs:
+        cert.revoke(reason='superseded', revoked_by=request.user)
+        CertificateRevocationLog.objects.create(
+            certificate=cert,
+            revoked_by=request.user,
+            reason=f'superseded (admin reissue: {reason})',
+            notes=notes
+        )
+        revoked_count += 1
+    
+    # Get the common name from old cert or generate new one
+    old_cert = active_certs.first()
+    common_name = old_cert.common_name if old_cert else target_user.username
+    
+    # Issue new certificate
+    result = issue_user_certificate(target_user.username, common_name=common_name)
+    
+    if not result.get('ok'):
+        logger.error(f"Admin reissue failed for {target_user.username}: {result.get('error')}")
+        return JsonResponse({'error': 'Certificate re-issue failed'}, status=500)
+    
+    # Create new certificate record
+    new_cert = UserCert.objects.create(
+        user=target_user,
+        common_name=common_name,
+        serial_number=result.get('serial_number', ''),
+        p12_enc_path=result.get('p12_enc_path', ''),
+        p12_pass_enc_path=result.get('p12_pass_enc_path', ''),
+        valid_from=result.get('valid_from'),
+        expires_at=result.get('expires_at')
+    )
+    
+    logger.info(f"Admin {request.user.username} reissued certificate for user: {target_user.username}, reason: {reason}")
+    
+    return JsonResponse({
+        'ok': True,
+        'message': f'Certificate reissued successfully for {target_user.username}',
+        'new_cert_id': new_cert.id,
+        'revoked_count': revoked_count,
+        'admin_user': request.user.username
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def admin_force_renew(request, cert_id):
+    """
+    Admin-only: Force renewal of a specific certificate regardless of expiry status.
+    
+    SECURITY: Requires admin privileges. All actions are logged.
+    """
+    if not request.user.is_staff:
+        logger.warning(f"Non-admin user {request.user.username} attempted to use admin_force_renew")
+        return JsonResponse({'error': 'Admin access required'}, status=403)
+    
+    from signing.certificate_issuer import issue_user_certificate
+    
+    try:
+        old_cert = UserCert.objects.get(id=cert_id)
+    except UserCert.DoesNotExist:
+        return JsonResponse({'error': 'Certificate not found'}, status=404)
+    
+    target_user = old_cert.user
+    reason = request.POST.get('reason', 'admin_forced_renewal')
+    notes = request.POST.get('notes', '')
+    
+    # Issue new certificate
+    result = issue_user_certificate(target_user.username, common_name=old_cert.common_name)
+    
+    if not result.get('ok'):
+        logger.error(f"Admin forced renewal failed for {target_user.username}: {result.get('error')}")
+        return JsonResponse({'error': 'Certificate renewal failed'}, status=500)
+    
+    # Revoke old certificate
+    if old_cert.active:
+        old_cert.revoke(reason='superseded', revoked_by=request.user)
+        CertificateRevocationLog.objects.create(
+            certificate=old_cert,
+            revoked_by=request.user,
+            reason=f'superseded (admin forced renewal: {reason})',
+            notes=notes
+        )
+    
+    # Create new certificate record
+    new_cert = UserCert.objects.create(
+        user=target_user,
+        common_name=old_cert.common_name,
+        serial_number=result.get('serial_number', ''),
+        p12_enc_path=result.get('p12_enc_path', ''),
+        p12_pass_enc_path=result.get('p12_pass_enc_path', ''),
+        valid_from=result.get('valid_from'),
+        expires_at=result.get('expires_at')
+    )
+    
+    logger.info(f"Admin {request.user.username} force renewed certificate {cert_id} for user: {target_user.username}")
+    
+    return JsonResponse({
+        'ok': True,
+        'message': f'Certificate renewed successfully for {target_user.username}',
+        'new_cert_id': new_cert.id,
+        'old_cert_id': cert_id,
+        'old_cert_revoked': True,
+        'admin_user': request.user.username
+    })
+
+
+@login_required
+def admin_list_all_certificates(request):
+    """
+    Admin-only: List all certificates in the system with detailed status.
+    
+    SECURITY: Requires admin privileges.
+    """
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Admin access required'}, status=403)
+    
+    now = timezone.now()
+    certs = UserCert.objects.select_related('user').order_by('-created_at')
+    
+    # Optional filters
+    status_filter = request.GET.get('status')
+    user_filter = request.GET.get('username')
+    
+    if user_filter:
+        certs = certs.filter(user__username__icontains=user_filter)
+    
+    result = []
+    for cert in certs:
+        # Calculate status
+        if not cert.active:
+            status = 'revoked'
+        elif cert.expires_at and cert.expires_at < now:
+            status = 'expired'
+        elif cert.expires_at:
+            days_remaining = (cert.expires_at - now).days
+            if days_remaining <= 30:
+                status = 'expiring_soon'
+            else:
+                status = 'valid'
+        else:
+            status = 'valid'
+        
+        # Apply status filter
+        if status_filter and status != status_filter:
+            continue
+        
+        result.append({
+            'id': cert.id,
+            'username': cert.user.username,
+            'common_name': cert.common_name,
+            'serial_number': cert.serial_number,
+            'status': status,
+            'active': cert.active,
+            'created_at': cert.created_at.isoformat(),
+            'valid_from': cert.valid_from.isoformat() if cert.valid_from else None,
+            'expires_at': cert.expires_at.isoformat() if cert.expires_at else None,
+            'days_remaining': (cert.expires_at - now).days if cert.expires_at and cert.active else None,
+            'revoked_at': cert.revoked_at.isoformat() if cert.revoked_at else None,
+            'revocation_reason': cert.revocation_reason
+        })
+    
+    return JsonResponse({
+        'certificates': result,
+        'total_count': len(result)
+    })
+

@@ -25,17 +25,16 @@ import {
   ChevronRight
 } from 'lucide-react';
 import {
-  getAdminDashboardStats,
+  getAdminStats,
   getAdminMeta,
-  adminListUsers,
-  adminGetUser,
-  adminCreateUser,
-  adminUpdateUser,
-  adminDeleteUser,
-  adminResetUserPassword,
-  adminListCertificates,
+  getAdminUsers,
+  getAdminUser,
+  createAdminUser,
+  updateAdminUser,
+  deleteAdminUser,
+  getAdminCertificates,
   adminRevokeCertificate,
-  adminListSigningHistory,
+  getAdminSigningHistory,
   adminRevokeSignature
 } from '../api';
 import '../static/styles/admin.css';
@@ -64,7 +63,7 @@ export default function AdminDashboard({ showMessage }) {
     try {
       setLoading(true);
       const [statsData, metaData] = await Promise.all([
-        getAdminDashboardStats(),
+        getAdminStats(),
         getAdminMeta()
       ]);
       setStats(statsData);
@@ -286,7 +285,7 @@ function UsersTab({ meta, showMessage }) {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const data = await adminListUsers({
+      const data = await getAdminUsers({
         page: pagination.page,
         per_page: 15,
         search: filters.search || undefined,
@@ -306,7 +305,7 @@ function UsersTab({ meta, showMessage }) {
 
   const handleViewUser = async (userId) => {
     try {
-      const data = await adminGetUser(userId);
+      const data = await getAdminUser(userId);
       setUserDetail(data);
       setShowModal('view');
     } catch (err) {
@@ -316,7 +315,7 @@ function UsersTab({ meta, showMessage }) {
 
   const handleEditUser = async (userId) => {
     try {
-      const data = await adminGetUser(userId);
+      const data = await getAdminUser(userId);
       setSelectedUser(data);
       setShowModal('edit');
     } catch (err) {
@@ -342,7 +341,7 @@ function UsersTab({ meta, showMessage }) {
 
   const confirmDelete = async (hardDelete = false) => {
     try {
-      await adminDeleteUser(selectedUser.id, hardDelete);
+      await deleteAdminUser(selectedUser.id, hardDelete);
       showMessage?.(hardDelete ? 'Đã xóa vĩnh viễn người dùng' : 'Đã vô hiệu hóa người dùng', 'success');
       setShowModal(null);
       loadUsers();
@@ -530,7 +529,7 @@ function CertificatesTab({ meta, showMessage }) {
   const loadCertificates = async () => {
     try {
       setLoading(true);
-      const data = await adminListCertificates({
+      const data = await getAdminCertificates({
         page: pagination.page,
         per_page: 15,
         search: filters.search || undefined,
@@ -580,10 +579,10 @@ function CertificatesTab({ meta, showMessage }) {
             onChange={(e) => setFilters(f => ({ ...f, status: e.target.value }))}
           >
             <option value="">Tất cả trạng thái</option>
-            <option value="active">Hoạt động</option>
+            <option value="valid">Hoạt động</option>
             <option value="revoked">Đã thu hồi</option>
             <option value="expired">Hết hạn</option>
-            <option value="expiring">Sắp hết hạn</option>
+            <option value="expiring_soon">Sắp hết hạn</option>
           </select>
         </div>
 
@@ -605,19 +604,21 @@ function CertificatesTab({ meta, showMessage }) {
                   <th>Common Name</th>
                   <th>Serial Number</th>
                   <th>Trạng thái</th>
-                  <th>Ngày tạo</th>
+                  <th>Hiệu lực từ</th>
                   <th>Hết hạn</th>
                   <th>Hành động</th>
                 </tr>
               </thead>
               <tbody>
                 {certificates.map(cert => (
-                  <tr key={cert.id}>
+                  <tr key={cert.id} className={!cert.active ? 'row-revoked' : ''}>
                     <td>{cert.username}</td>
                     <td>{cert.common_name}</td>
-                    <td className="serial-cell">{cert.serial_number || '-'}</td>
+                    <td className="serial-cell" title={cert.serial_number}>
+                      {cert.serial_number ? cert.serial_number.substring(0, 16) + '...' : '-'}
+                    </td>
                     <td><CertStatusBadge status={cert.status} /></td>
-                    <td className="date-cell">{formatDate(cert.created_at)}</td>
+                    <td className="date-cell">{cert.valid_from ? formatDate(cert.valid_from) : formatDate(cert.created_at)}</td>
                     <td className="date-cell">{cert.expires_at ? formatDate(cert.expires_at) : '-'}</td>
                     <td className="actions-cell">
                       {cert.active && (
@@ -675,7 +676,7 @@ function SigningHistoryTab({ showMessage }) {
   const loadHistory = async () => {
     try {
       setLoading(true);
-      const data = await adminListSigningHistory({
+      const data = await getAdminSigningHistory({
         page: pagination.page,
         per_page: 15,
         search: filters.search || undefined,
@@ -857,7 +858,7 @@ function UserFormModal({ mode, user, meta, onClose, onSuccess, showMessage }) {
     try {
       setLoading(true);
       if (mode === 'create') {
-        await adminCreateUser(formData);
+        await createAdminUser(formData);
         showMessage?.('Tạo người dùng thành công!', 'success');
       } else {
         const updateData = {
@@ -866,7 +867,7 @@ function UserFormModal({ mode, user, meta, onClose, onSuccess, showMessage }) {
           is_staff: formData.is_staff,
           profile: formData.profile
         };
-        await adminUpdateUser(user.user.id, updateData);
+        await updateAdminUser(user.user.id, updateData);
         showMessage?.('Cập nhật thành công!', 'success');
       }
       onSuccess();
@@ -1254,9 +1255,11 @@ function StatusBadge({ status }) {
 function CertStatusBadge({ status }) {
   const config = {
     active: { text: 'Hoạt động', className: 'active' },
+    valid: { text: 'Hoạt động', className: 'active' },
     revoked: { text: 'Thu hồi', className: 'revoked' },
     expired: { text: 'Hết hạn', className: 'expired' },
     expiring: { text: 'Sắp hết hạn', className: 'warning' },
+    expiring_soon: { text: 'Sắp hết hạn', className: 'warning' },
   };
   const { text, className } = config[status] || config.active;
   

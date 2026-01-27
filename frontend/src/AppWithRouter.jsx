@@ -17,7 +17,7 @@ import SigningHistory from './components/SigningHistory';
 import SigningHistoryDetail from './components/SigningHistoryDetail';
 import CertificateManager from './components/CertificateManager';
 import ChangePassword from './components/ChangePassword';
-import AdminDashboard from './components/AdminDashboard';
+import AdminDashboard from './components/admin/AdminDashboard';
 import './static/styles/variables.css';
 import './static/styles/global.css';
 import './static/styles/components.css';
@@ -45,7 +45,6 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [certificateInfo, setCertificateInfo] = useState(null);
-  const [signingStats, setSigningStats] = useState(null);
   const navigate = useNavigate();
 
   /**
@@ -80,14 +79,12 @@ function AppContent() {
     const fetchDashboardData = async () => {
       if (!user) {
         setCertificateInfo(null);
-        setSigningStats(null);
         return;
       }
       
       try {
         const data = await getUserDashboardData();
         setCertificateInfo(data.certificate || null);
-        setSigningStats(data.signing_stats || null);
       } catch (err) {
         console.error('Failed to fetch dashboard data:', err);
         // Set mock data for development if API not ready
@@ -95,11 +92,6 @@ function AppContent() {
           status: 'valid',
           days_remaining: 365,
           common_name: user.username
-        });
-        setSigningStats({
-          total_signed: 0,
-          valid_signatures: 0,
-          this_month: 0
         });
       }
     };
@@ -165,7 +157,6 @@ function AppContent() {
       await logout();
       setUser(null);
       setCertificateInfo(null);
-      setSigningStats(null);
       navigate('/sign');
       showMessage('Đăng xuất thành công', 'success');
     } catch (err) {
@@ -240,7 +231,6 @@ function AppContent() {
         onAuthClick={() => setShowAuthModal(true)}
         onLogout={handleLogout}
         certificateInfo={certificateInfo}
-        signingStats={signingStats}
       />
       
       <main className="main-content">
@@ -323,16 +313,6 @@ function AppContent() {
             } 
           />
           {/* Admin routes */}
-          <Route 
-            path="/admin" 
-            element={
-              user?.is_staff ? (
-                <AdminDashboard showMessage={showMessage} />
-              ) : (
-                <Navigate to="/sign" replace />
-              )
-            } 
-          />
           <Route 
             path="/admin/*" 
             element={

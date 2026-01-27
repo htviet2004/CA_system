@@ -11,7 +11,9 @@ import {
   Save,
   AlertCircle,
   CheckCircle,
-  Info
+  Info,
+  Clock,
+  AlertTriangle
 } from 'lucide-react';
 import '../static/styles/userinfo.css';
 import { updateProfile, fetchProfile, fetchRoles, fetchDepartments } from '../api';
@@ -26,6 +28,8 @@ import { updateProfile, fetchProfile, fetchRoles, fetchDepartments } from '../ap
  * - Inline validation errors
  * - Save disabled until changes detected
  * - PKI notes about which fields affect certificates
+ * - Role change confirmation dialog
+ * - Timestamps display for profile update tracking
  */
 export default function UserProfile({ username, onBack, showMessage, isAdmin = false }) {
   const navigate = useNavigate();
@@ -49,6 +53,9 @@ export default function UserProfile({ username, onBack, showMessage, isAdmin = f
   const [errors, setErrors] = useState({});
   const [canEdit, setCanEdit] = useState(false);
   const [canEditRole, setCanEditRole] = useState(false);
+  const [showRoleConfirm, setShowRoleConfirm] = useState(false);
+  const [pendingRole, setPendingRole] = useState(null);
+  const [updatedAt, setUpdatedAt] = useState(null);
   
   // Meta data for dropdowns
   const [roles, setRoles] = useState([]);
@@ -119,6 +126,7 @@ export default function UserProfile({ username, onBack, showMessage, isAdmin = f
           setOriginalForm(profileData);
           setCanEdit(res.can_edit !== false);
           setCanEditRole(res.can_edit_role === true || isAdmin);
+          setUpdatedAt(res.profile.updated_at || null);
         }
       } catch (err) {
         console.error('Failed to load profile:', err);
@@ -137,6 +145,14 @@ export default function UserProfile({ username, onBack, showMessage, isAdmin = f
   // Handle input changes
   const handleChange = (e) => {
     const { name, value } = e.target;
+    
+    // Special handling for role changes - show confirmation
+    if (name === 'role' && canEditRole && value !== form.role && originalForm?.role) {
+      setPendingRole(value);
+      setShowRoleConfirm(true);
+      return;
+    }
+    
     setForm(prev => ({ ...prev, [name]: value }));
     
     // Clear error for this field
@@ -204,6 +220,10 @@ export default function UserProfile({ username, onBack, showMessage, isAdmin = f
       } else if (res.ok) {
         setOriginalForm({ ...form });
         setSuccessMessage('Lưu thông tin thành công');
+        // Update the timestamp from response
+        if (res.profile?.updated_at) {
+          setUpdatedAt(res.profile.updated_at);
+        }
         if (showMessage) {
           showMessage('Lưu thông tin thành công', 'success');
         }
@@ -226,6 +246,37 @@ export default function UserProfile({ username, onBack, showMessage, isAdmin = f
       onBack();
     } else {
       navigate('/sign');
+    }
+  };
+
+  // Handle role change confirmation
+  const handleRoleConfirm = () => {
+    if (pendingRole !== null) {
+      setForm(prev => ({ ...prev, role: pendingRole }));
+      setSuccessMessage('');
+    }
+    setShowRoleConfirm(false);
+    setPendingRole(null);
+  };
+
+  const handleRoleCancel = () => {
+    setShowRoleConfirm(false);
+    setPendingRole(null);
+  };
+
+  // Format date for display
+  const formatDate = (dateString) => {
+    if (!dateString) return null;
+    try {
+      return new Date(dateString).toLocaleString('vi-VN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return null;
     }
   };
 
@@ -469,7 +520,45 @@ export default function UserProfile({ username, onBack, showMessage, isAdmin = f
             </span>
           )}
         </div>
+
+        {/* Last Updated Timestamp */}
+        {updatedAt && (
+          <div className="userinfo-footer">
+            <Clock size={14} />
+            <span>Cập nhật lần cuối: {formatDate(updatedAt)}</span>
+          </div>
+        )}
       </form>
+
+      {/* Role Change Confirmation Dialog */}
+      {showRoleConfirm && (
+        <div className="confirm-overlay">
+          <div className="confirm-dialog">
+            <div className="confirm-icon warning">
+              <AlertTriangle size={24} />
+            </div>
+            <h3>Xác nhận thay đổi vai trò</h3>
+            <p>
+              Bạn đang thay đổi vai trò từ{' '}
+              <strong>{roles.find(r => r.value === form.role)?.label || form.role}</strong>
+              {' '}sang{' '}
+              <strong>{roles.find(r => r.value === pendingRole)?.label || pendingRole}</strong>.
+            </p>
+            <p className="confirm-warning">
+              <AlertCircle size={14} />
+              Thay đổi vai trò có thể ảnh hưởng đến quyền truy cập của người dùng.
+            </p>
+            <div className="confirm-actions">
+              <button type="button" className="btn btn-secondary" onClick={handleRoleCancel}>
+                Hủy
+              </button>
+              <button type="button" className="btn btn-warning" onClick={handleRoleConfirm}>
+                Xác nhận thay đổi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

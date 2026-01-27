@@ -78,7 +78,12 @@ export default function SigningHistory({ username }) {
       };
       const data = await getSignedDocuments(currentPage, itemsPerPage, filters);
       setDocuments(data.documents || []);
-      setPagination(data.pagination || { total: 0, total_pages: 1 });
+      // API returns: total, page, limit, has_more
+      const totalPages = Math.ceil((data.total || 0) / itemsPerPage);
+      setPagination({ 
+        total: data.total || 0, 
+        total_pages: totalPages || 1 
+      });
     } catch (err) {
       setError('Không thể tải lịch sử ký số: ' + (err.message || err));
       setDocuments([]);
@@ -249,19 +254,19 @@ export default function SigningHistory({ username }) {
       {/* Stats Summary */}
       <div className="history-stats">
         <div className="stat-card">
-          <span className="stat-number">{stats?.total_documents || pagination.total || 0}</span>
+          <span className="stat-number">{stats?.total_signed ?? documents.length}</span>
           <span className="stat-label">Tổng số</span>
         </div>
         <div className="stat-card valid">
-          <span className="stat-number">{stats?.by_status?.valid || 0}</span>
+          <span className="stat-number">{stats?.valid_signatures ?? 0}</span>
           <span className="stat-label">Hợp lệ</span>
         </div>
         <div className="stat-card warning">
-          <span className="stat-number">{stats?.downloadable_count || 0}</span>
+          <span className="stat-number">{stats?.downloadable_documents ?? 0}</span>
           <span className="stat-label">Có thể tải</span>
         </div>
         <div className="stat-card info">
-          <span className="stat-number">{stats?.total_downloads || 0}</span>
+          <span className="stat-number">{stats?.total_download_count ?? 0}</span>
           <span className="stat-label">Lượt tải</span>
         </div>
       </div>
