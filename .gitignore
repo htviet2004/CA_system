@@ -9,7 +9,7 @@ backend/signed_documents/
 users/
 # Env
 .env
-.env.*
+
 
 # Node / React
 node_modules/

@@ -89,64 +89,33 @@ source venv/bin/activate
 
 ### 3. Create Environment File
 
-Create a `.env` file in the `backend/` directory:
+Copy the example environment file and configure it:
 
 ```bash
 cd backend
-touch .env   # or create manually on Windows
+cp .env.example .env
 ```
 
 ### 4. Configure Environment Variables
 
-Add the following to `backend/.env`:
+Open `backend/.env` and set the required values:
+
+```bash
+# Generate SECRET_KEY
+python -c "import secrets; print(secrets.token_urlsafe(50))"
+
+# Generate FERNET_SALT  
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Copy the generated values into your `.env` file:
 
 ```env
-# =============================================================================
-# REQUIRED - Security Configuration
-# =============================================================================
-# Django secret key - MUST be unique and kept secret
-# Generate with: python -c "import secrets; print(secrets.token_urlsafe(50))"
-SECRET_KEY=your-generated-secret-key-here
-
-# Fernet encryption salt for certificate encryption (recommended)
-# Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
-FERNET_SALT=your-generated-salt-here
-
-# =============================================================================
-# OPTIONAL - Development Settings
-# =============================================================================
-# Enable debug mode (set to False in production)
-DEBUG=True
-
-# Allowed hosts (comma-separated)
-ALLOWED_HOSTS=localhost,127.0.0.1
-
-# =============================================================================
-# OPTIONAL - Database Configuration (MySQL)
-# =============================================================================
-# Uncomment to use MySQL instead of SQLite
-# DB_ENGINE=mysql
-# DB_NAME=ca_system
-# DB_USER=your_mysql_user
-# DB_PASSWORD=your_mysql_password
-# DB_HOST=localhost
-# DB_PORT=3306
-
-# =============================================================================
-# OPTIONAL - Production Security Settings
-# =============================================================================
-# SECURE_SSL_REDIRECT=True
-# SESSION_COOKIE_SECURE=True
-# CSRF_COOKIE_SECURE=True
-# SECURE_HSTS_SECONDS=31536000
-# CSRF_TRUSTED_ORIGINS=https://yourdomain.com
-
-# =============================================================================
-# OPTIONAL - File Storage
-# =============================================================================
-# Signed PDF retention period in days (default: 14)
-# SIGNED_PDF_RETENTION_DAYS=14
+SECRET_KEY=paste-your-generated-secret-key-here
+FERNET_SALT=paste-your-generated-salt-here
 ```
+
+> **Note:** See `.env.example` for all available configuration options including database and production security settings.
 
 #### Environment Variables Reference
 
@@ -221,7 +190,7 @@ npm install
 npm start
 ```
 
-The frontend will be available at: `http://localhost:5173`
+The frontend will be available at: `http://localhost:3000`
 
 > **Note:** The frontend is configured to proxy API requests to the Django backend at `http://127.0.0.1:8000`.
 
@@ -258,10 +227,11 @@ npm start
 
 | Service | URL | Description |
 |---------|-----|-------------|
-| Frontend | http://localhost:5173 | React application |
+| Frontend | http://localhost:3000 | React application |
 | Backend API | http://127.0.0.1:8000/api/ | REST API endpoints |
 | Django Admin | http://127.0.0.1:8000/admin/ | Admin interface |
 
+If needed, update API base URL in `frontend/src/api.js`
 ---
 
 ## Certificate Authority Setup
