@@ -63,10 +63,20 @@ def get_all_meta(request):
     Response:
         {
             "roles": [...],
-            "departments": [...]
+            "departments": [...],
+            "certificate_revocation_reasons": [...]
         }
     """
+    from usercerts.models import UserCert
+    
+    # Certificate revocation reasons
+    revocation_reasons = [
+        {'value': reason[0], 'label': reason[1]}
+        for reason in UserCert.REVOCATION_REASONS
+    ]
+    
     return JsonResponse({
         'roles': UserProfile.get_role_choices_list(),
-        'departments': UserProfile.get_department_choices_list()
+        'departments': UserProfile.get_department_choices_list(),
+        'certificate_revocation_reasons': revocation_reasons
     })

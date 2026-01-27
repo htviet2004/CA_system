@@ -265,6 +265,40 @@ extendedKeyUsage = emailProtection, clientAuth
             check=True
         )
 
+        # Extract serial number and validity dates from certificate
+        messages.append('Extracting certificate info')
+        serial_number = ''
+        valid_from = ''
+        valid_to = ''
+        try:
+            # Get serial number
+            serial_result = subprocess.run(
+                ['openssl', 'x509', '-in', str(crt_path), '-serial', '-noout'],
+                capture_output=True, text=True
+            )
+            if serial_result.returncode == 0:
+                # Output format: serial=XXXXX
+                serial_line = serial_result.stdout.strip()
+                if '=' in serial_line:
+                    serial_number = serial_line.split('=')[1]
+            
+            # Get validity dates
+            dates_result = subprocess.run(
+                ['openssl', 'x509', '-in', str(crt_path), '-dates', '-noout'],
+                capture_output=True, text=True
+            )
+            if dates_result.returncode == 0:
+                # Output format:
+                # notBefore=Jan 27 06:00:00 2026 GMT
+                # notAfter=Jan 27 06:00:00 2027 GMT
+                for line in dates_result.stdout.strip().split('\n'):
+                    if line.startswith('notBefore='):
+                        valid_from = line.split('=')[1]
+                    elif line.startswith('notAfter='):
+                        valid_to = line.split('=')[1]
+        except Exception as e:
+            messages.append(f'Warning: Could not extract cert info: {e}')
+
         messages.append('Encrypting PKCS#12 and passphrase')
         data = p12_path.read_bytes()
         enc = fernet.encrypt(data)
@@ -285,6 +319,9 @@ extendedKeyUsage = emailProtection, clientAuth
             'username': username,
             'p12_enc_path': str(enc_path),
             'p12_pass_enc_path': str(pass_enc_path),
+            'serial_number': serial_number,
+            'valid_from': valid_from,
+            'valid_to': valid_to,
             'messages': messages,
             'note': 'Private key and unencrypted files have been securely deleted'
         }

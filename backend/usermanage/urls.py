@@ -23,7 +23,7 @@ urlpatterns = [
     path('meta/departments/', get_departments, name='meta_departments'),
     path('meta/all/', get_all_meta, name='meta_all'),
     
-    # User management (admin)
+    # User management (admin) - legacy endpoints
     path('list/', views.list_users, name='list_users'),
     path('detail/<str:username>/', views.user_detail, name='user_detail'),
     path('set_active/<str:username>/', views.set_active, name='set_active'),
@@ -31,4 +31,13 @@ urlpatterns = [
     path('reset_password/<str:username>/', views.reset_password, name='reset_password'),
     path('profile/update/', update_profile, name='update_profile'),
     path('profile/<str:username>/', get_profile, name='get_profile'),
+    
+    # Admin dashboard APIs
+    path('admin/stats/', views.admin_stats, name='admin_stats'),
+    path('admin/users/', views.admin_users_list, name='admin_users_list'),
+    path('admin/users/create/', views.admin_create_user, name='admin_create_user'),
+    path('admin/users/<int:user_id>/', views.admin_user_detail, name='admin_user_detail'),
+    path('admin/users/<int:user_id>/update/', views.admin_update_user, name='admin_update_user'),
+    path('admin/users/<int:user_id>/delete/', views.admin_delete_user, name='admin_delete_user'),
+    path('admin/signing-history/', views.admin_signing_history, name='admin_signing_history'),
 ]

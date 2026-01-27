@@ -15,6 +15,7 @@ class UserCert(models.Model):
         - p12_enc_path: Path to encrypted P12 file
         - p12_pass_enc_path: Path to encrypted passphrase file
         - created_at: Certificate creation timestamp
+        - valid_from: Certificate validity start date
         - expires_at: Certificate expiration date
         - active: Whether certificate is active (not revoked)
         - revoked_at: Timestamp of revocation (if revoked)
@@ -38,7 +39,8 @@ class UserCert(models.Model):
     p12_enc_path = models.CharField(max_length=1024)
     p12_pass_enc_path = models.CharField(max_length=1024)
     created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField(null=True, blank=True)
+    valid_from = models.DateTimeField(null=True, blank=True, help_text="Certificate validity start date")
+    expires_at = models.DateTimeField(null=True, blank=True, help_text="Certificate expiration date")
     active = models.BooleanField(default=True, db_index=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     revocation_reason = models.CharField(

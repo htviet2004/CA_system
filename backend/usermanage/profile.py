@@ -246,6 +246,7 @@ def update_profile(request):
             'email': profile.email or '',
             'role': profile.role or '',
             'notes': profile.notes or '',
+            'updated_at': profile.updated_at.isoformat() if profile.updated_at else None,
         },
         'changes_made': len(changes_made),
         'can_edit_role': is_admin

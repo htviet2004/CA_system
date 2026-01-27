@@ -7,8 +7,6 @@ import {
   Shield,
   Settings,
   ChevronDown,
-  History,
-  Download,
   Key,
   AlertTriangle,
   CheckCircle,
@@ -36,8 +34,7 @@ import '../static/styles/dropdown.css';
 export default function UserDropdown({ 
   user, 
   onLogout,
-  certificateInfo,
-  signingStats
+  certificateInfo
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -83,7 +80,7 @@ export default function UserDropdown({
       return { icon: AlertTriangle, text: 'Không có', className: 'status-none' };
     }
 
-    const { status, daysUntilExpiry } = certificateInfo;
+    const { status, days_remaining } = certificateInfo;
 
     if (status === 'revoked') {
       return { icon: XCircle, text: 'Đã thu hồi', className: 'status-revoked' };
@@ -91,8 +88,8 @@ export default function UserDropdown({
     if (status === 'expired') {
       return { icon: XCircle, text: 'Hết hạn', className: 'status-expired' };
     }
-    if (daysUntilExpiry !== null && daysUntilExpiry <= 30) {
-      return { icon: AlertTriangle, text: `Còn ${daysUntilExpiry} ngày`, className: 'status-warning' };
+    if (days_remaining !== null && days_remaining <= 30) {
+      return { icon: AlertTriangle, text: `Còn ${days_remaining} ngày`, className: 'status-warning' };
     }
     if (status === 'valid') {
       return { icon: CheckCircle, text: 'Hợp lệ', className: 'status-valid' };
@@ -157,43 +154,16 @@ export default function UserDropdown({
                 <span className="cert-status-label">Trạng thái</span>
                 <span className="cert-status-value">{certBadge.text}</span>
               </div>
-              {certificateInfo?.expiresAt && (
+              {certificateInfo?.expires_at && (
                 <div className="cert-expiry">
                   <Clock size={12} />
-                  <span>{new Date(certificateInfo.expiresAt).toLocaleDateString('vi-VN')}</span>
+                  <span>{new Date(certificateInfo.expires_at).toLocaleDateString('vi-VN')}</span>
                 </div>
               )}
             </div>
           </div>
 
           <div className="dropdown-divider" />
-
-          {/* Quick Stats */}
-          {signingStats && (
-            <>
-              <div className="dropdown-section">
-                <div className="section-title">
-                  <History size={14} />
-                  Thống kê ký số
-                </div>
-                <div className="stats-grid">
-                  <div className="stat-item">
-                    <span className="stat-value">{signingStats.totalSigned || 0}</span>
-                    <span className="stat-label">Đã ký</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-value">{signingStats.validSignatures || 0}</span>
-                    <span className="stat-label">Hợp lệ</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-value">{signingStats.thisMonth || 0}</span>
-                    <span className="stat-label">Tháng này</span>
-                  </div>
-                </div>
-              </div>
-              <div className="dropdown-divider" />
-            </>
-          )}
 
           {/* Menu Items */}
           <div className="dropdown-items">
@@ -224,26 +194,17 @@ export default function UserDropdown({
               <span>Quản lý chứng chỉ</span>
             </button>
 
-            <button 
-              className="dropdown-item"
-              onClick={() => handleMenuClick(() => navigate('/download-cert'))}
-              role="menuitem"
-            >
-              <Download size={18} />
-              <span>Tải chứng chỉ</span>
-            </button>
-
             {/* Admin-only items */}
             {user.is_staff && (
               <>
                 <div className="dropdown-divider" />
                 <button 
                   className="dropdown-item admin-item"
-                  onClick={() => handleMenuClick(() => navigate('/admin/users'))}
+                  onClick={() => handleMenuClick(() => navigate('/admin'))}
                   role="menuitem"
                 >
                   <Settings size={18} />
-                  <span>Quản lý người dùng</span>
+                  <span>Bảng điều khiển Admin</span>
                 </button>
               </>
             )}

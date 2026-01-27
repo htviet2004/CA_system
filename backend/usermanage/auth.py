@@ -153,11 +153,27 @@ def register(request):
         
         if result.get('ok'):
             issued = True
+            # Parse validity dates if provided
+            valid_from = None
+            expires_at = None
+            try:
+                from datetime import datetime
+                if result.get('valid_from'):
+                    # Parse OpenSSL date format: "Jan 27 06:00:00 2026 GMT"
+                    valid_from = datetime.strptime(result['valid_from'], '%b %d %H:%M:%S %Y %Z')
+                if result.get('valid_to'):
+                    expires_at = datetime.strptime(result['valid_to'], '%b %d %H:%M:%S %Y %Z')
+            except Exception as e:
+                logger.warning(f"Could not parse certificate dates: {e}")
+            
             UserCert.objects.create(
                 user=user, 
                 common_name=full_name or username,  # Use full name as CN if available
+                serial_number=result.get('serial_number', ''),
                 p12_enc_path=result.get('p12_enc_path', ''), 
-                p12_pass_enc_path=result.get('p12_pass_enc_path', ''), 
+                p12_pass_enc_path=result.get('p12_pass_enc_path', ''),
+                valid_from=valid_from,
+                expires_at=expires_at,
                 active=True
             )
         else:

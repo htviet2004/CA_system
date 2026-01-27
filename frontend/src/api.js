@@ -215,7 +215,7 @@ export async function getSigningHistory(page = 1, limit = 50) {
 export async function getSignedDocuments(page = 1, perPage = 20, filters = {}) {
   const params = new URLSearchParams({
     page: page.toString(),
-    per_page: perPage.toString()
+    limit: perPage.toString()
   })
   
   if (filters.status) params.append('status', filters.status)
@@ -353,6 +353,252 @@ export async function changePassword(currentPassword, newPassword) {
       'X-CSRFToken': getCsrf()
     },
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+/**
+ * ADMIN-ONLY CERTIFICATE MANAGEMENT
+ * These functions require admin privileges
+ */
+
+export async function adminListAllCertificates(filters = {}) {
+  const params = new URLSearchParams()
+  if (filters.status) params.append('status', filters.status)
+  if (filters.username) params.append('username', filters.username)
+  
+  const res = await fetch(`/api/usercerts/admin/all-certificates/?${params}`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+// Alias for AdminCertificatesTab component compatibility
+export async function getAdminCertificates(params = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.page) searchParams.append('page', params.page.toString())
+  if (params.per_page) searchParams.append('per_page', params.per_page.toString())
+  if (params.search) searchParams.append('username', params.search)
+  if (params.status) searchParams.append('status', params.status)
+  
+  const res = await fetch(`/api/usercerts/admin/all-certificates/?${searchParams}`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  const data = await res.json()
+  // Transform response to match expected format
+  return {
+    certificates: data.certificates || [],
+    pagination: {
+      total: data.total_count || 0,
+      total_pages: Math.ceil((data.total_count || 0) / (params.per_page || 10))
+    }
+  }
+}
+
+export async function adminReissueCertificate(userId, reason = '', notes = '') {
+  const fd = new FormData()
+  fd.append('reason', reason)
+  fd.append('notes', notes)
+  
+  const res = await fetch(`/api/usercerts/admin/reissue/${userId}/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRFToken': getCsrf() },
+    body: fd
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+export async function adminForceRenewCertificate(certId, reason = '', notes = '') {
+  const fd = new FormData()
+  fd.append('reason', reason)
+  fd.append('notes', notes)
+  
+  const res = await fetch(`/api/usercerts/admin/force-renew/${certId}/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRFToken': getCsrf() },
+    body: fd
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+// Alias for AdminCertificatesTab compatibility
+export async function adminRenewCertificate(certId, reason = '', notes = '') {
+  return adminForceRenewCertificate(certId, reason, notes)
+}
+
+export async function adminRevokeCertificate(certId, reason = 'unspecified') {
+  const fd = new FormData()
+  fd.append('reason', reason)
+  
+  const res = await fetch(`/api/usercerts/revoke/${certId}/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRFToken': getCsrf() },
+    body: fd
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+/**
+ * ADMIN STATS API
+ */
+export async function getAdminStats() {
+  const res = await fetch('/api/usermanage/admin/stats/', {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+/**
+ * ADMIN USER MANAGEMENT API
+ */
+export async function getAdminUsers(params = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.page) searchParams.append('page', params.page.toString())
+  if (params.per_page) searchParams.append('per_page', params.per_page.toString())
+  if (params.search) searchParams.append('search', params.search)
+  if (params.status) searchParams.append('status', params.status)
+  if (params.role) searchParams.append('role', params.role)
+  
+  const res = await fetch(`/api/usermanage/admin/users/?${searchParams}`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+export async function getAdminUser(userId) {
+  const res = await fetch(`/api/usermanage/admin/users/${userId}/`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+export async function createAdminUser(userData) {
+  const res = await fetch('/api/usermanage/admin/users/create/', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrf()
+    },
+    body: JSON.stringify(userData)
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+export async function updateAdminUser(userId, userData) {
+  const res = await fetch(`/api/usermanage/admin/users/${userId}/update/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrf()
+    },
+    body: JSON.stringify(userData)
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+export async function deleteAdminUser(userId) {
+  const res = await fetch(`/api/usermanage/admin/users/${userId}/delete/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRFToken': getCsrf() }
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+export async function getAdminMeta() {
+  // Use existing meta endpoint
+  return fetchAllMeta()
+}
+
+/**
+ * ADMIN SIGNING HISTORY API
+ */
+export async function getAdminSigningHistory(params = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.page) searchParams.append('page', params.page.toString())
+  if (params.per_page) searchParams.append('per_page', params.per_page.toString())
+  if (params.search) searchParams.append('search', params.search)
+  if (params.status) searchParams.append('status', params.status)
+  if (params.username) searchParams.append('username', params.username)
+  
+  const res = await fetch(`/api/usermanage/admin/signing-history/?${searchParams}`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt)
+  }
+  return res.json()
+}
+
+export async function adminRevokeSignature(signatureId, reason = '') {
+  const fd = new FormData()
+  fd.append('reason', reason)
+  
+  const res = await fetch(`/api/usercerts/history/${signatureId}/revoke/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRFToken': getCsrf() },
+    body: fd
   })
   if (!res.ok) {
     const txt = await res.text()

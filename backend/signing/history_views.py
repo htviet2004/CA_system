@@ -107,6 +107,7 @@ def list_signed_documents(request):
             'download_count': doc.download_count,
             'last_downloaded_at': doc.last_downloaded_at.isoformat() if doc.last_downloaded_at else None,
             'certificate_cn': doc.certificate.common_name if doc.certificate else None,
+            'file_path': bool(doc.file_path),  # Only indicate if file exists, not the actual path
         })
     
     return JsonResponse({
